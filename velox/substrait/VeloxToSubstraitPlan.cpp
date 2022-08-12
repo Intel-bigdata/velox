@@ -43,23 +43,36 @@ namespace {
 
 // Merge the two RowTypePointer into one.
 std::shared_ptr<facebook::velox::RowType> mergeRowTypes(
-  RowTypePtr leftRowTypePtr, RowTypePtr rightRowTypePtr) {
-
+    RowTypePtr leftRowTypePtr,
+    RowTypePtr rightRowTypePtr) {
   std::vector<std::string> names;
   std::vector<TypePtr> types;
-  // TODO: Swith to RowType::unionWith when it's implemented; 
+  // TODO: Swith to RowType::unionWith when it's implemented;
   // auto joinInputType = leftRowTypePtr->unionWith(rightRowTypePtr);
-  names.insert(names.end(), leftRowTypePtr->names().begin(), leftRowTypePtr->names().end());
-  names.insert(names.end(), rightRowTypePtr->names().begin(), rightRowTypePtr->names().end());
-  types.insert(types.end(), leftRowTypePtr->children().begin(), leftRowTypePtr->children().end());
-  types.insert(types.end(), rightRowTypePtr->children().begin(), rightRowTypePtr->children().end());
-  
-  // Union two input RowType. 
+  names.insert(
+      names.end(),
+      leftRowTypePtr->names().begin(),
+      leftRowTypePtr->names().end());
+  names.insert(
+      names.end(),
+      rightRowTypePtr->names().begin(),
+      rightRowTypePtr->names().end());
+  types.insert(
+      types.end(),
+      leftRowTypePtr->children().begin(),
+      leftRowTypePtr->children().end());
+  types.insert(
+      types.end(),
+      rightRowTypePtr->children().begin(),
+      rightRowTypePtr->children().end());
+
+  // Union two input RowType.
   return std::make_shared<RowType>(std::move(names), std::move(types));
 }
 
 // Return true if the join type is supported.
-bool checkForSupportJoinType(const std::shared_ptr<const core::AbstractJoinNode>& nodePtr) {
+bool checkForSupportJoinType(
+    const std::shared_ptr<const core::AbstractJoinNode>& nodePtr) {
   // TODO: Implemented other types of Join.
   return nodePtr->isInnerJoin();
 }
@@ -357,8 +370,8 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
   for (int i = 0; i < numColumns; i++) {
     joinCondition.emplace_back(std::make_shared<core::CallTypedExpr>(
         BOOLEAN(),
-        std::vector<core::TypedExprPtr>{
-            joinNode->leftKeys().at(i), joinNode->rightKeys().at(i)},
+        std::vector<core::TypedExprPtr>{joinNode->leftKeys().at(i),
+                                        joinNode->rightKeys().at(i)},
         "eq"));
   }
 
@@ -399,6 +412,11 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
   functionMap_["eq"] = 7;
   functionMap_["and"] = 8;
   functionMap_["neq"] = 9;
+  functionMap_["gt"] = 10;
+  functionMap_["max"] = 11;
+  functionMap_["min"] = 12;
+  functionMap_["avg"] = 13;
+  functionMap_["between"] = 14;
 }
 
 ::substrait::Plan& VeloxToSubstraitPlanConvertor::addExtensionFunc(
@@ -445,7 +463,7 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(5);
-  extensionFunction->set_name("sum:opt_i32");
+  extensionFunction->set_name("sum:any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
@@ -470,6 +488,37 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(9);
   extensionFunction->set_name("not_equal:any1_any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(10);
+  extensionFunction->set_name("gt:i32_i32");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(11);
+  extensionFunction->set_name("max:any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(12);
+  extensionFunction->set_name("min:any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(13);
+  extensionFunction->set_name("avg:any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(14);
+  extensionFunction->set_name("between:any1_any1_any1");
+
   return *substraitPlan;
 }
 

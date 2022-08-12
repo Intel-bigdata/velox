@@ -158,6 +158,12 @@ const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
       substraitType->set_allocated_struct_(substraitStruct);
       break;
     }
+    case velox::TypeKind::DATE: {
+      ::substrait::Type_Date* subDate = google::protobuf::Arena::CreateMessage<::substrait::Type_Date>(&arena);
+      subDate->set_nullability(::substrait::Type_Nullability_NULLABILITY_NULLABLE);
+      substraitType->set_allocated_date(subDate);
+      break;
+    }
     case velox::TypeKind::UNKNOWN: {
       auto substraitUserDefined =
           google::protobuf::Arena::CreateMessage<::substrait::Type_UserDefined>(

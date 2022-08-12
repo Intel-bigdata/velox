@@ -119,7 +119,8 @@ VeloxToSubstraitExprConvertor::toSubstraitExpr(
 
   ::substrait::Expression_ReferenceSegment_StructField* directStruct =
       substraitFieldExpr->mutable_direct_reference()->mutable_struct_field();
-
+  // Add root_reference for direct_reference with struct_field.
+  substraitFieldExpr->mutable_root_reference();
   directStruct->set_field(inputType->getChildIdx(exprName));
   return *substraitFieldExpr;
 }
@@ -270,6 +271,11 @@ VeloxToSubstraitExprConvertor::toSubstraitNotNullLiteral(
       sVarChar->set_value(vCharValue.data());
       sVarChar->set_length(vCharValue.size());
       literalExpr->set_allocated_var_char(sVarChar);
+      break;
+    }
+    case velox::TypeKind::TIMESTAMP: {
+      literalExpr->set_timestamp(
+          variantValue.value<TypeKind::TIMESTAMP>().getNanos());
       break;
     }
     default:
