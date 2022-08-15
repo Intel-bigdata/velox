@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+// add a comment
 #pragma once
 
 #include <cstdint>
 #include <vector>
 
 #include "velox/common/base/BitUtil.h"
-
 namespace facebook::velox {
 // Dynamic size dense bit set that Keeps track of maximum set bit.
 class BitSet {
