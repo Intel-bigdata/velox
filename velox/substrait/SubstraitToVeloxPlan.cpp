@@ -475,6 +475,7 @@ connector::hive::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
       switch (typeCase) {
         case ::substrait::Expression::RexTypeCase::kSelection: {
           auto sel = argExpr.selection();
+
           // TODO: Only direct reference is considered here.
           auto dRef = sel.direct_reference();
           colIdx = substraitParser_->parseReferenceSegment(dRef);
@@ -556,6 +557,7 @@ void SubstraitVeloxPlanConverter::flattenConditions(
       if (getNameBeforeDelimiter(filterNameSpec, ":") == "and") {
         for (const auto& sCondition : sFunc.arguments()) {
           flattenConditions(sCondition.value(), scalarFunctions);
+
         }
       } else {
         scalarFunctions.emplace_back(sFunc);

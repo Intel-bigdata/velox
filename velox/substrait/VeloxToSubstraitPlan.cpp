@@ -370,8 +370,8 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
   for (int i = 0; i < numColumns; i++) {
     joinCondition.emplace_back(std::make_shared<core::CallTypedExpr>(
         BOOLEAN(),
-        std::vector<core::TypedExprPtr>{joinNode->leftKeys().at(i),
-                                        joinNode->rightKeys().at(i)},
+        std::vector<core::TypedExprPtr>{
+            joinNode->leftKeys().at(i), joinNode->rightKeys().at(i)},
         "eq"));
   }
 
