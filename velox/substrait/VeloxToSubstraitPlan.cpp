@@ -417,8 +417,10 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
   functionMap_["min"] = 12;
   functionMap_["avg"] = 13;
   functionMap_["between"] = 14;
+  functionMap_["minus"] = 15;
+  functionMap_["lte"] = 16;
+  functionMap_["gte"] = 17;
 }
-
 ::substrait::Plan& VeloxToSubstraitPlanConvertor::addExtensionFunc(
     google::protobuf::Arena& arena) {
   // TODO: Fetch all functions from velox's registry and add them into substrait
@@ -433,31 +435,31 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
 
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(0);
-  extensionFunction->set_name("add:opt_i32_i32");
+  extensionFunction->set_name("add:opt_any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(1);
-  extensionFunction->set_name("multiply:opt_i32_i32");
+  extensionFunction->set_name("multiply:opt_any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(1);
   extensionFunction->set_function_anchor(2);
-  extensionFunction->set_name("lt:i32_i32");
+  extensionFunction->set_name("lt:any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(3);
-  extensionFunction->set_name("divide:i32_i32");
+  extensionFunction->set_name("divide:any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(4);
-  extensionFunction->set_name("count:opt_i32");
+  extensionFunction->set_name("count:opt_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
@@ -469,13 +471,13 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(6);
-  extensionFunction->set_name("modulus:i32_i32");
+  extensionFunction->set_name("modulus:any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(7);
-  extensionFunction->set_name("equal:i64_i64");
+  extensionFunction->set_name("equal:any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
@@ -493,7 +495,7 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
       substraitPlan->add_extensions()->mutable_extension_function();
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(10);
-  extensionFunction->set_name("gt:i32_i32");
+  extensionFunction->set_name("gt:any1_any1");
 
   extensionFunction =
       substraitPlan->add_extensions()->mutable_extension_function();
@@ -518,6 +520,25 @@ void VeloxToSubstraitPlanConvertor::constructFunctionMap() {
   extensionFunction->set_extension_uri_reference(0);
   extensionFunction->set_function_anchor(14);
   extensionFunction->set_name("between:any1_any1_any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(15);
+  extensionFunction->set_name("subtract:any1_any1");
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(16);
+  extensionFunction->set_name("lte:any1_any1");
+
+
+  extensionFunction =
+      substraitPlan->add_extensions()->mutable_extension_function();
+  extensionFunction->set_extension_uri_reference(0);
+  extensionFunction->set_function_anchor(17);
+  extensionFunction->set_name("gte:any1_any1");
 
   return *substraitPlan;
 }
