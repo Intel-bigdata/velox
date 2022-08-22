@@ -18,6 +18,8 @@
 
 #include "velox/core/PlanNode.h"
 
+#include "velox/substrait/SubstraitFunctionCollector.h"
+#include "velox/substrait/SubstraitTypeLookup.h"
 #include "velox/substrait/proto/substrait/algebra.pb.h"
 #include "velox/substrait/proto/substrait/type.pb.h"
 
@@ -25,15 +27,23 @@ namespace facebook::velox::substrait {
 
 class VeloxToSubstraitTypeConvertor {
  public:
+  VeloxToSubstraitTypeConvertor(
+      const SubstraitFunctionCollectorPtr& functionCollector,
+      const SubstraitTypeLookupPtr& typeLookup);
   /// Convert Velox RowType to Substrait NamedStruct.
   const ::substrait::NamedStruct& toSubstraitNamedStruct(
       google::protobuf::Arena& arena,
-      const velox::RowTypePtr& rowType);
+      const velox::RowTypePtr& rowType) const;
 
   /// Convert Velox Type to Substrait Type.
   const ::substrait::Type& toSubstraitType(
       google::protobuf::Arena& arena,
-      const velox::TypePtr& type);
+      const velox::TypePtr& type) const;
+
+ private:
+  /// The function Collector used to collect the function reference.
+  const SubstraitFunctionCollectorPtr functionCollector_;
+  const SubstraitTypeLookupPtr typeLookup_;
 };
 
 using VeloxToSubstraitTypeConvertorPtr =

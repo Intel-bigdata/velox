@@ -20,9 +20,14 @@
 
 namespace facebook::velox::substrait {
 
+VeloxToSubstraitTypeConvertor::VeloxToSubstraitTypeConvertor(
+    const SubstraitFunctionCollectorPtr& functionCollector,
+    const SubstraitTypeLookupPtr& typeLookup)
+    : functionCollector_(functionCollector), typeLookup_(typeLookup) {}
+
 const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
     google::protobuf::Arena& arena,
-    const velox::TypePtr& type) {
+    const velox::TypePtr& type) const {
   ::substrait::Type* substraitType =
       google::protobuf::Arena::CreateMessage<::substrait::Type>(&arena);
   switch (type->kind()) {
@@ -168,14 +173,21 @@ const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
       break;
     }
     case velox::TypeKind::UNKNOWN: {
-      auto substraitUserDefined =
-          google::protobuf::Arena::CreateMessage<::substrait::Type_UserDefined>(
-              &arena);
-      substraitUserDefined->set_type_reference(0);
-      substraitUserDefined->set_nullability(
-          ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
-      substraitType->set_allocated_user_defined(substraitUserDefined);
-      break;
+      //velox unknown type binding to substrait unknown type
+      const auto& substraitTypeAnchor = typeLookup_->lookupUnknownType();
+      if (substraitTypeAnchor.has_value()) {
+        auto substraitUserDefined = google::protobuf::Arena::CreateMessage<
+            ::substrait::Type_UserDefined>(&arena);
+        substraitUserDefined->set_type_reference(
+            functionCollector_->getTypeReference(substraitTypeAnchor.value()));
+        substraitUserDefined->set_nullability(
+            ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
+        substraitType->set_allocated_user_defined(substraitUserDefined);
+        break;
+      } else {
+        VELOX_UNSUPPORTED(
+            "type anchor not found for velox type '{}'", type->toString());
+      }
     }
     case velox::TypeKind::FUNCTION:
     case velox::TypeKind::OPAQUE:
@@ -189,7 +201,7 @@ const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
 const ::substrait::NamedStruct&
 VeloxToSubstraitTypeConvertor::toSubstraitNamedStruct(
     google::protobuf::Arena& arena,
-    const velox::RowTypePtr& rowType) {
+    const velox::RowTypePtr& rowType) const {
   ::substrait::NamedStruct* substraitNamedStruct =
       google::protobuf::Arena::CreateMessage<::substrait::NamedStruct>(&arena);
 

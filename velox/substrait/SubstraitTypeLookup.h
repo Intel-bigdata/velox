@@ -14,18 +14,26 @@
  * limitations under the License.
  */
 
-#include <core/Expressions.h>
-#include "velox/core/ITypedExpr.h"
-#include "velox/substrait/SubstraitSignature.h"
-#include "velox/type/Type.h"
+#pragma once
+
+#include "velox/core/PlanNode.h"
+#include "velox/substrait/SubstraitType.h"
 
 namespace facebook::velox::substrait {
+class SubstraitTypeLookup {
+ public:
+  SubstraitTypeLookup(const std::vector<SubstraitTypeAnchorPtr>& types);
+  /// lookup substrait type anchor by given type name
+  std::optional<SubstraitTypeAnchorPtr> lookupType(
+      const std::string& typeName) const;
 
-/// Return the Velox type according to the typename.
-TypePtr toVeloxType(const std::string& typeName);
+  std::optional<SubstraitTypeAnchorPtr> lookupUnknownType() const;
 
-std::string_view getNameBeforeDelimiter(
-    const std::string& compoundName,
-    const std::string& delimiter);
+ private:
+  // type signatures , key is type name, value is the type anchor
+  std::unordered_map<std::string, SubstraitTypeAnchorPtr> signatures_;
+};
+
+using SubstraitTypeLookupPtr = std::shared_ptr<const SubstraitTypeLookup>;
 
 } // namespace facebook::velox::substrait

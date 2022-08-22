@@ -23,6 +23,7 @@ add_executable(
   VeloxSubstraitSignatureTest.cpp
   SubstraitExtensionCollectorTest.cpp)
 
+
 add_dependencies(velox_plan_conversion_test velox_substrait_plan_converter)
 
 add_test(

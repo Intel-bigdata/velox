@@ -21,6 +21,7 @@
 #include "velox/vector/tests/utils/VectorMaker.h"
 
 #include "velox/substrait/SubstraitToVeloxPlan.h"
+#include "velox/substrait/VeloxToSubstraitMappings.h"
 #include "velox/substrait/VeloxToSubstraitPlan.h"
 
 using namespace facebook::velox;
@@ -72,6 +73,7 @@ class VeloxSubstraitRoundTripTest : public OperatorTestBase {
 
   std::shared_ptr<VeloxToSubstraitPlanConvertor> veloxConvertor_ =
       std::make_shared<VeloxToSubstraitPlanConvertor>();
+
   std::shared_ptr<SubstraitVeloxPlanConverter> substraitConverter_ =
       std::make_shared<SubstraitVeloxPlanConverter>(pool_.get());
 };
@@ -279,11 +281,13 @@ TEST_F(VeloxSubstraitRoundTripTest, caseWhen) {
 TEST_F(VeloxSubstraitRoundTripTest, ifThen) {
   auto vectors = makeVectors(3, 4, 2);
   createDuckDbTable(vectors);
+
   auto plan = PlanBuilder()
                   .values(vectors)
-                  .project({"if (c0=1, c0 + 1, c1 + 2) as x"})
+                  .project({"if (c0 = 1, c0 + 1, c1 + 2) as x"})
                   .planNode();
-  assertPlanConversion(plan, "SELECT if (c0=1, c0 + 1, c1 + 2) as x FROM tmp");
+  assertPlanConversion(
+      plan, "SELECT if (c0 = 1, c0 + 1, c1 + 2) as x FROM tmp");
 }
 
 TEST_F(VeloxSubstraitRoundTripTest, notNullLiteral) {

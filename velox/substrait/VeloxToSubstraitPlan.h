@@ -19,7 +19,6 @@
 #include <google/protobuf/arena.h>
 #include <string>
 #include <typeinfo>
-
 #include "velox/core/PlanNode.h"
 #include "velox/type/Type.h"
 
@@ -27,12 +26,22 @@
 #include "velox/substrait/VeloxToSubstraitExpr.h"
 #include "velox/substrait/proto/substrait/algebra.pb.h"
 #include "velox/substrait/proto/substrait/plan.pb.h"
+#include "velox/type/Type.h"
 
 namespace facebook::velox::substrait {
 
 /// Convert the Velox plan into Substrait plan.
 class VeloxToSubstraitPlanConvertor {
  public:
+  /// constructor VeloxToSubstraitPlanConvertor
+  VeloxToSubstraitPlanConvertor();
+
+  /// constructor VeloxToSubstraitPlanConvertor with given substrait extension
+  /// and function mappings.
+  VeloxToSubstraitPlanConvertor(
+      const SubstraitExtensionPtr& substraitExtension,
+      const SubstraitFunctionMappingsPtr& functionMappings);
+
   /// Convert Velox PlanNode into Substrait Plan.
   /// @param vPlan Velox query plan to convert.
   /// @param arena Arena to use for allocating Substrait plan objects.
@@ -85,7 +94,6 @@ class VeloxToSubstraitPlanConvertor {
   ///  Fetch all functions from Velox's registry and create Substrait extensions
   ///  for these.
   ::substrait::Plan& addExtensionFunc(google::protobuf::Arena& arena);
-
 
   /// The Expression converter used to convert Velox representations into
   /// Substrait expressions.
