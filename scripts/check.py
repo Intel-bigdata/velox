@@ -174,7 +174,7 @@ def get_commit(files):
     if files == "commit":
         return "HEAD^"
 
-    if files == "main" or files == "master":
+    if files == "main" or files == "master" or files.startswith("WW"):
         return util.run(f"git merge-base origin/{files} HEAD")[1]
 
     return ""
@@ -216,6 +216,7 @@ def add_check_options(subparser, name):
 
 
 def add_options(parser):
+    parser.add_argument("files", action="store_const", default="main", const="fix")
     files = parser.add_subparsers(dest="files")
 
     tree_parser = add_check_options(files, "tree")
@@ -223,6 +224,9 @@ def add_options(parser):
 
     branch_parser = add_check_options(files, "main")
     branch_parser = add_check_options(files, "master")
+    for week_num in range(30, 100):
+        branch_parser = add_check_options(files, f"WW{week_num}")
+    branch_parser = add_check_options(files, "deceloper")
     commit_parser = add_check_options(files, "commit")
 
 

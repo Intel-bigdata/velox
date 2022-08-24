@@ -64,6 +64,8 @@ FUZZER_DURATION_SEC ?= 60
 
 PYTHON_EXECUTABLE ?= $(shell which python)
 
+BRANCH ?= "developer"
+
 all: release			#: Build the release version
 
 clean:					#: Delete all build artifacts
@@ -114,18 +116,22 @@ fuzzertest: debug
 		--logtostderr=1 \
 		--minloglevel=0
 
-format-fix: 			#: Fix formatting issues in the main branch
-	scripts/check.py format main --fix
+format-fix: 			#: Fix formatting issues in the specified branch, default main
+	@echo "format-fix base branch is : $(BRANCH)"
+	scripts/check.py format $(BRANCH) --fix
 
-format-check: 			#: Check for formatting issues on the main branch
+format-check: 			#: Check for formatting issues on the specified branch, default main
 	clang-format --version
-	scripts/check.py format main
+	@echo "format-check base branch is : $(BRANCH)"
+	scripts/check.py format $(BRANCH)
 
-header-fix:				#: Fix license header issues in the current branch
-	scripts/check.py header main --fix
+header-fix:				#: Fix license header issues in the specified branch, default main
+	@echo "header-fix base branch is : $(BRANCH)"
+	scripts/check.py header $(BRANCH) --fix
 
-header-check:			#: Check for license header issues on the main branch
-	scripts/check.py header main
+header-check:			#: Check for license header issues on the specified branch, default main
+	@echo "header-check base branch is : $(BRANCH)"
+	scripts/check.py header $(BRANCH)
 
 circleci-container:			#: Build the linux container for CircleCi
 	$(MAKE) linux-container CONTAINER_NAME=circleci

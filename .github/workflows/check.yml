@@ -1,0 +1,81 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: check
+
+on:
+  push:
+    branches: 
+      - WW*
+  pull_request:
+    branches: 
+      - developer
+      - WW*
+
+
+jobs:
+  build:
+    runs-on: inner_velox_ci
+    steps:
+      - name: Clean up CI directory
+        working-directory: ${{github.workspace}}
+        run: |
+          rm -rf * .[!.]*
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: format-check
+        if: ${{github.event.pull_request.base.ref}}
+        run: |
+          ls 
+          pwd
+          echo ${{github.event.pull_request.base.ref}}
+          if ! make format-check BRANCH=${{github.event.pull_request.base.ref}}; then
+            make format-fix BRANCH=${{github.event.pull_request.base.ref}}
+            echo -e "\n==== Apply using:"
+            echo "patch -p1 \<<EOF"
+            git --no-pager diff
+            echo "EOF"
+            false
+          fi
+
+      - name: header-check
+        if: ${{github.event.pull_request.base.ref}}
+        run: |
+          if ! make header-check BRANCH=${{github.event.pull_request.base.ref}}; then
+            make header-fix BRANCH=${{github.event.pull_request.base.ref}}
+            echo -e "\n==== Apply using:"
+            echo "patch -p1 \<<EOF"
+            git --no-pager diff
+            echo "EOF"
+            false
+          fi
