@@ -18,8 +18,8 @@
 
 namespace facebook::velox::substrait {
 
-const std::string SubstraitSignature::signature() const {
-  std::stringstream signature;
+const std::string SubstraitFunctionSignature::signature() const {
+  std::ostringstream signature;
   signature << name_;
   if (!arguments_.empty()) {
     signature << ":";
@@ -36,7 +36,7 @@ const std::string SubstraitSignature::signature() const {
   return signature.str();
 }
 
-const std::string SubstraitSignature::signature(
+const std::string SubstraitFunctionSignature::signature(
     const std::string& functionSignature,
     const SubstraitFunctionMappingsPtr& functionMappings) {
   // try to replace function name with function mappings

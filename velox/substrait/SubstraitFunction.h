@@ -143,6 +143,14 @@ struct SubstraitFunctionVariant {
     return *this;
   }
 
+  virtual const bool isAggregateFunction() {
+    return false;
+  }
+
+  virtual const bool isScalarFunction() {
+    return true;
+  }
+
   /// A collection of required arguments
   std::vector<SubstraitFunctionArgumentPtr> requiredArguments() const;
 };
@@ -151,7 +159,26 @@ using SubstraitFunctionVariantPtr = std::shared_ptr<SubstraitFunctionVariant>;
 
 struct SubstraitScalarFunctionVariant : public SubstraitFunctionVariant {};
 
-struct SubstraitAggregateFunctionVariant : public SubstraitFunctionVariant {};
+struct SubstraitAggregateFunctionVariant : public SubstraitFunctionVariant {
+  SubstraitTypePtr intermediate;
+  const bool isAggregateFunction() override {
+    return true;
+  }
+  const bool isScalarFunction() override {
+    return false;
+  }
+
+  /// return intermediate function signature by function name and intermediate.
+  const std::string intermediateSignature() const {
+    if (intermediate) {
+      return name + ":" + intermediate->signature();
+    }
+    return name;
+  }
+};
+
+using SubstraitAggregateFunctionVariantPtr =
+    std::shared_ptr<SubstraitAggregateFunctionVariant>;
 
 struct SubstraitScalarFunction {
   /// scalar function name.

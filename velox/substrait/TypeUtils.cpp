@@ -129,7 +129,7 @@ SubstraitSignaturePtr toSubstraitSignature(
   const auto& veloxFunctionName = callTypedExpr->name();
 
   if (callTypedExpr->inputs().empty()) {
-    return std::make_shared<SubstraitSignature>(
+    return SubstraitFunctionSignature::of(
         veloxFunctionName, SubstraitType::fromVelox(callTypedExpr->type()));
   }
 
@@ -138,10 +138,10 @@ SubstraitSignaturePtr toSubstraitSignature(
     types.emplace_back(SubstraitType::fromVelox(input->type()));
   }
 
-  return SubstraitSignature::of(
+  return SubstraitFunctionSignature::of(
       veloxFunctionName,
-      SubstraitType::fromVelox(callTypedExpr->type()),
-      types);
+      types,
+      SubstraitType::fromVelox(callTypedExpr->type()));
 }
 
 } // namespace facebook::velox::substrait

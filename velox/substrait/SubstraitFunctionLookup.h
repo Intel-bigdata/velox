@@ -30,6 +30,7 @@ namespace facebook::velox::substrait {
 class SubstraitFunctionLookup {
  protected:
   SubstraitFunctionLookup(
+      const bool& forAggregateFunc,
       const std::vector<SubstraitFunctionVariantPtr>& functionVariants,
       const SubstraitFunctionMappingsPtr& functionMappings);
 
@@ -58,7 +59,7 @@ class SubstraitFunctionLookup {
 
    private:
     /// test current wildcard function variant match the given signature.
-    bool isMatch(const SubstraitSignaturePtr& signature) const;
+    bool isSameTypeTraits(const SubstraitSignaturePtr& signature) const;
 
     /// A map store type position and its type reference.
     std::unordered_map<int, int> typeTraits;
@@ -74,6 +75,7 @@ class SubstraitFunctionLookup {
     /// construct FunctionFinder with function name and it's function variants
     SubstraitFunctionFinder(
         const std::string& name,
+        const bool& forAggregateFunc,
         const std::vector<SubstraitFunctionVariantPtr>& functionVariants);
 
     /// lookup function variant by given substrait function signature.
@@ -83,8 +85,13 @@ class SubstraitFunctionLookup {
    private:
     /// function name
     const std::string name_;
+    const bool forAggregateFunc_;
     /// A map store the function signature and corresponding function variant
     std::unordered_map<std::string, SubstraitFunctionVariantPtr> directMap_;
+    /// A map store the intermediate function signature and corresponding
+    /// function variant
+    std::unordered_map<std::string, SubstraitFunctionVariantPtr>
+        intermediateMap_;
     /// A collection of function variant which contains wildcard type
     std::vector<FunctionTypeTraitPtr> wildcardFunctionVariants_;
   };
@@ -102,6 +109,7 @@ class SubstraitScalarFunctionLookup : public SubstraitFunctionLookup {
       const SubstraitExtensionPtr& extension,
       const SubstraitFunctionMappingsPtr& functionMappings)
       : SubstraitFunctionLookup(
+            false,
             extension->scalarFunctionVariants,
             functionMappings) {}
 
@@ -122,6 +130,7 @@ class SubstraitAggregateFunctionLookup : public SubstraitFunctionLookup {
       const SubstraitExtensionPtr& extension,
       const SubstraitFunctionMappingsPtr& functionMappings)
       : SubstraitFunctionLookup(
+            true,
             extension->aggregateFunctionVariants,
             functionMappings) {}
 

@@ -110,7 +110,15 @@ struct convert<SubstraitAggregateFunctionVariant> {
   static bool decode(
       const Node& node,
       SubstraitAggregateFunctionVariant& function) {
-    return decodeFunctionVariant(node, function);
+    auto res = decodeFunctionVariant(node, function);
+    if (res) {
+      const auto& intermediate = node["intermediate"];
+      if (intermediate) {
+        function.intermediate =
+            SubstraitType::decode(intermediate.as<std::string>());
+      }
+    }
+    return res;
   }
 };
 
@@ -331,7 +339,7 @@ std::optional<SubstraitFunctionVariantPtr> SubstraitExtension::lookupFunction(
     const SubstraitFunctionMappingsPtr& functionMappings,
     const std::string& signature) const {
   const auto& functionSignature =
-      SubstraitSignature::signature(signature, functionMappings);
+      SubstraitFunctionSignature::signature(signature, functionMappings);
   return this->lookupFunction(functionSignature);
 }
 

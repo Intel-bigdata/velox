@@ -36,7 +36,7 @@ class SubstraitFunctionMappingsTest : public SubstraitFunctionMappings {
 TEST_F(SubstraitSignatureTest, signatureWithFunctionMappings) {
   auto testSubstraitFunctionMappings =
       std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitSignature ::signature(
+  auto signature = SubstraitFunctionSignature ::signature(
       "plus:opt_i8_i8", testSubstraitFunctionMappings);
   ASSERT_EQ(signature, "add:opt_i8_i8");
 }
@@ -44,7 +44,7 @@ TEST_F(SubstraitSignatureTest, signatureWithFunctionMappings) {
 TEST_F(SubstraitSignatureTest, unknowSignatureWithFunctionMappings) {
   auto testSubstraitFunctionMappings =
       std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitSignature ::signature(
+  auto signature = SubstraitFunctionSignature ::signature(
       "abc:opt_i8_i8", testSubstraitFunctionMappings);
   ASSERT_EQ(signature, "abc:opt_i8_i8");
 }
@@ -52,15 +52,15 @@ TEST_F(SubstraitSignatureTest, unknowSignatureWithFunctionMappings) {
 TEST_F(SubstraitSignatureTest, signatureWithoutTypes) {
   auto testSubstraitFunctionMappings =
       std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature =
-      SubstraitSignature ::signature("add", testSubstraitFunctionMappings);
+  auto signature = SubstraitFunctionSignature ::signature(
+      "add", testSubstraitFunctionMappings);
   ASSERT_EQ(signature, "add");
 }
 
 TEST_F(SubstraitSignatureTest, signatureWithoutTypesWithFunctionMappings) {
   auto testSubstraitFunctionMappings =
       std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature =
-      SubstraitSignature ::signature("plus", testSubstraitFunctionMappings);
+  auto signature = SubstraitFunctionSignature ::signature(
+      "plus", testSubstraitFunctionMappings);
   ASSERT_EQ(signature, "add");
 }

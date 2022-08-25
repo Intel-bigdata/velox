@@ -21,49 +21,48 @@
 
 namespace facebook::velox::substrait {
 
-class SubstraitSignature final {
+class SubstraitFunctionSignature {
  public:
   /// construct the substrait function signature with function name, return type
   /// and arguments.
-  SubstraitSignature(
+  SubstraitFunctionSignature(
       const std::string& name,
-      const SubstraitTypePtr& returnType,
-      const std::vector<SubstraitTypePtr>& arguments)
-      : name_(name), returnType_(returnType), arguments_(arguments) {}
-
-  /// construct the substrait function signature with function name, return
-  /// type.
-  SubstraitSignature(
-      const std::string& name,
+      const std::vector<SubstraitTypePtr>& arguments,
       const SubstraitTypePtr& returnType)
-      : name_(name), returnType_(returnType) {}
+      : name_(name), arguments_(arguments), returnType_(returnType) {}
 
-  static std::shared_ptr<SubstraitSignature> of(
+  static std::shared_ptr<SubstraitFunctionSignature> of(
       const std::string& name,
-      const SubstraitTypePtr& returnType) {
-    return std::make_shared<SubstraitSignature>(name, returnType);
-  }
-
-  static std::shared_ptr<SubstraitSignature> of(
-      const std::string& name,
-      const SubstraitTypePtr& returnType,
       const std::vector<SubstraitTypePtr>& arguments) {
-    return std::make_shared<SubstraitSignature>(name, returnType, arguments);
+    return std::make_shared<SubstraitFunctionSignature>(
+        name, arguments, nullptr);
+  }
+  static std::shared_ptr<SubstraitFunctionSignature> of(
+      const std::string& name,
+      const std::vector<SubstraitTypePtr>& arguments,
+      const SubstraitTypePtr& returnType) {
+    return std::make_shared<SubstraitFunctionSignature>(
+        name, arguments, returnType);
   }
 
+  static std::shared_ptr<SubstraitFunctionSignature> of(
+      const std::string name,
+      const SubstraitTypePtr& returnType) {
+    return of(name, {}, returnType);
+  }
   /// Return function signature according to the given function name and
   /// substrait types.
   const std::string signature() const;
 
-  const std::string& getName() const {
+  const std::string getName() const {
     return name_;
   }
 
-  const std::vector<SubstraitTypePtr>& getArguments() const {
+  const std::vector<SubstraitTypePtr> getArguments() const {
     return arguments_;
   }
 
-  const SubstraitTypePtr& getReturnType() const {
+  const SubstraitTypePtr getReturnType() const {
     return returnType_;
   }
 
@@ -74,10 +73,10 @@ class SubstraitSignature final {
 
  private:
   const std::string name_;
-  const SubstraitTypePtr returnType_;
   const std::vector<SubstraitTypePtr> arguments_;
+  const SubstraitTypePtr returnType_;
 };
 
-using SubstraitSignaturePtr = std::shared_ptr<const SubstraitSignature>;
+using SubstraitSignaturePtr = std::shared_ptr<const SubstraitFunctionSignature>;
 
 } // namespace facebook::velox::substrait
