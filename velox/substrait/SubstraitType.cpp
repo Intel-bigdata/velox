@@ -15,8 +15,11 @@
  */
 
 #include "velox/substrait/SubstraitType.h"
+#include "velox/type/Type.h"
 
 namespace facebook::velox::substrait {
+
+namespace {
 
 size_t findNextComma(const std::string& str, size_t start) {
   int cnt = 0;
@@ -33,43 +36,50 @@ size_t findNextComma(const std::string& str, size_t start) {
   return std::string::npos;
 }
 
+} // namespace
+
 SubstraitTypePtr SubstraitType::decode(const std::string& rawType) {
-  const auto& parenPos = rawType.find('<');
   std::string matchingType = rawType;
+  const auto& questionMaskPos = rawType.find_last_of('?');
+  // deal with type and with a question mask like "i32?".
+  if (questionMaskPos != std::string::npos) {
+    matchingType = rawType.substr(0, questionMaskPos);
+  }
   std::transform(
       matchingType.begin(),
       matchingType.end(),
       matchingType.begin(),
       [](unsigned char c) { return std::tolower(c); });
 
-  if (parenPos == std::string::npos) {
-    const auto& scalarTypes = scalarTypeMapping();
-    if (scalarTypes.find(matchingType) != scalarTypes.end()) {
-      return scalarTypes.at(matchingType);
+  const auto& leftAngleBracketPos = rawType.find('<');
+  if (leftAngleBracketPos == std::string::npos) {
+    const auto& scalarType = scalarTypeMapping().find(matchingType);
+    if (scalarType != scalarTypeMapping().end()) {
+      return scalarType->second;
     } else if (matchingType.rfind("unknown", 0) == 0) {
       return std::make_shared<const SubstraitUsedDefinedType>(rawType);
     } else {
       return std::make_shared<const SubstraitStringLiteralType>(rawType);
     }
   }
-
-  const auto& endParenPos = rawType.rfind('>');
+  const auto& rightAngleBracketPos = rawType.rfind('>');
   VELOX_CHECK(
-      endParenPos != std::string::npos,
-      "Couldn't find the closing parenthesis.");
+      rightAngleBracketPos != std::string::npos,
+      "Couldn't find the closing angle bracket.");
+
+  auto baseType = matchingType.substr(0, leftAngleBracketPos);
 
   std::vector<SubstraitTypePtr> nestedTypes;
-  auto baseType = matchingType.substr(0, parenPos);
-  auto prevPos = parenPos + 1;
+  nestedTypes.reserve(8);
+  auto prevPos = leftAngleBracketPos + 1;
   auto commaPos = findNextComma(rawType, prevPos);
   while (commaPos != std::string::npos) {
     auto token = rawType.substr(prevPos, commaPos - prevPos);
-    nestedTypes.emplace_back(SubstraitType::decode(token));
+    nestedTypes.emplace_back(decode(token));
     prevPos = commaPos + 1;
     commaPos = findNextComma(rawType, prevPos);
   }
-
-  auto token = rawType.substr(prevPos, endParenPos - prevPos);
+  auto token = rawType.substr(prevPos, rightAngleBracketPos - prevPos);
   nestedTypes.emplace_back(decode(token));
 
   if (baseType == "list") {
@@ -85,7 +95,7 @@ SubstraitTypePtr SubstraitType::decode(const std::string& rawType) {
   } else if (baseType == "decimal") {
     VELOX_CHECK(
         nestedTypes.size() == 2,
-        "decimal type must have a parameterized type for scale and a parameterized type for precision");
+        "decimal type must have a parameterized type for precision and a parameterized type for scale");
     auto precision =
         std::dynamic_pointer_cast<const SubstraitStringLiteralType>(
             nestedTypes[0]);
@@ -123,6 +133,13 @@ SubstraitTypePtr SubstraitType::decode(const std::string& rawType) {
   }
 }
 
+#define SUBSTRAIT_SCALAR_TYPE_MAPPING(typeKind)                           \
+  {                                                                       \
+    SubstraitTypeTraits<SubstraitTypeKind::typeKind>::typeString,         \
+        std::make_shared<SubstraitTypeBase<SubstraitTypeKind::typeKind>>( \
+            SubstraitTypeBase<SubstraitTypeKind::typeKind>())             \
+  }
+
 const std::unordered_map<std::string, SubstraitTypePtr>&
 SubstraitType::scalarTypeMapping() {
   static const std::unordered_map<std::string, SubstraitTypePtr> scalarTypeMap{
@@ -145,5 +162,193 @@ SubstraitType::scalarTypeMapping() {
   };
   return scalarTypeMap;
 }
+
+const std::string SubstraitFixedBinaryType::signature() const {
+  std::stringstream sign;
+  sign << SubstraitTypeBase::signature();
+  sign << "<";
+  sign << length_->value();
+  sign << ">";
+  return sign.str();
+}
+
+bool SubstraitFixedBinaryType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitFixedBinaryType>(other)) {
+    return true;
+  }
+  return false;
+}
+
+const std::string SubstraitDecimalType::signature() const {
+  std::stringstream signature;
+  signature << SubstraitTypeBase::signature();
+  signature << "<";
+  signature << precision_->value() << "," << scale_->value();
+  signature << ">";
+  return signature.str();
+}
+
+bool SubstraitDecimalType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitDecimalType>(other)) {
+    return true;
+  }
+  return false;
+}
+
+const std::string SubstraitFixedCharType::signature() const {
+  std::ostringstream sign;
+  sign << SubstraitTypeBase::signature();
+  sign << "<";
+  sign << length_->value();
+  sign << ">";
+  return sign.str();
+}
+
+bool SubstraitFixedCharType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitFixedCharType>(other)) {
+    return true;
+  }
+  return false;
+}
+
+const std::string SubstraitVarcharType::signature() const {
+  std::ostringstream sign;
+  sign << SubstraitTypeBase::signature();
+  sign << "<";
+  sign << length_->value();
+  sign << ">";
+  return sign.str();
+}
+
+bool SubstraitVarcharType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitVarcharType>(other)) {
+    return true;
+  }
+  return false;
+}
+
+const std::string SubstraitStructType::signature() const {
+  std::ostringstream signature;
+  signature << SubstraitTypeBase::signature();
+  signature << "<";
+  for (auto it = children_.begin(); it != children_.end(); ++it) {
+    const auto& typeSign = (*it)->signature();
+    if (it == children_.end() - 1) {
+      signature << typeSign;
+    } else {
+      signature << typeSign << ",";
+    }
+  }
+  signature << ">";
+  return signature.str();
+}
+
+bool SubstraitStructType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitStructType>(other)) {
+    bool sameSize = type->children_.size() == children_.size();
+    if (sameSize) {
+      for (int i = 0; i < children_.size(); i++) {
+        if (!children_[i]->isSameAs(type->children_[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+const std::string SubstraitMapType::signature() const {
+  std::ostringstream signature;
+  signature << SubstraitTypeBase::signature();
+  signature << "<";
+  signature << keyType_->signature();
+  signature << ",";
+  signature << valueType_->signature();
+  signature << ">";
+  return signature.str();
+}
+
+bool SubstraitMapType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitMapType>(other)) {
+    return type->keyType_->isSameAs(keyType_) &&
+        type->valueType_->isSameAs(valueType_);
+  }
+  return false;
+}
+
+const std::string SubstraitListType::signature() const {
+  std::ostringstream signature;
+  signature << SubstraitTypeBase::signature();
+  signature << "<";
+  signature << type_->signature();
+  signature << ">";
+  return signature.str();
+}
+
+bool SubstraitListType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitListType>(other)) {
+    return type->type_->isSameAs(type_);
+  }
+  return false;
+}
+
+bool SubstraitUsedDefinedType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitUsedDefinedType>(other)) {
+    return type->value_ == value_;
+  }
+  return false;
+}
+
+bool SubstraitStringLiteralType::isSameAs(
+    const std::shared_ptr<const SubstraitType>& other) const {
+  if (const auto& type =
+          std::dynamic_pointer_cast<const SubstraitStringLiteralType>(other)) {
+    return type->value_ == value_;
+  }
+  return false;
+}
+
+#define DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(typeKind)                        \
+  std::shared_ptr<const SubstraitScalarType<SubstraitTypeKind::typeKind>> \
+  typeKind() {                                                            \
+    return std::make_shared<                                              \
+        const SubstraitScalarType<SubstraitTypeKind::typeKind>>();        \
+  }
+
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kBool);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kI8);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kI16);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kI32);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kI64);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kFp32);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kFp64);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kString);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kBinary);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kTimestamp);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kDate);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kTime);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kIntervalYear);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kIntervalDay);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kTimestampTz);
+DEFINE_SUBSTRAIT_SCALAR_ACCESSOR(kUuid);
+
+#undef DEFINE_SUBSTRAIT_SCALAR_ACCESSOR
 
 } // namespace facebook::velox::substrait

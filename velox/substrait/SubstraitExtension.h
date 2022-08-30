@@ -23,7 +23,8 @@
 namespace facebook::velox::substrait {
 
 /// class used to deserialize substrait YAML extension files.
-struct SubstraitExtension {
+class SubstraitExtension {
+ public:
   /// deserialize default substrait extension.
   static std::shared_ptr<SubstraitExtension> loadExtension();
 
@@ -63,6 +64,10 @@ struct SubstraitExtension {
 
   /// substrait user defined types loaded from Substrait extension yaml.
   std::vector<SubstraitTypeAnchorPtr> types;
+
+ private:
+  /// deserialize default substrait extension.
+  static std::shared_ptr<SubstraitExtension> loadDefault();
 };
 
 using SubstraitExtensionPtr = std::shared_ptr<const SubstraitExtension>;

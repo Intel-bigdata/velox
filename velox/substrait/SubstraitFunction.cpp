@@ -15,9 +15,11 @@
  */
 
 #include "velox/substrait/SubstraitFunction.h"
+#include <sstream>
 #include "velox/substrait/SubstraitType.h"
 
 namespace facebook::velox::substrait {
+
 std::string SubstraitFunctionVariant::signature(
     const std::string& name,
     const std::vector<SubstraitFunctionArgumentPtr>& arguments) {

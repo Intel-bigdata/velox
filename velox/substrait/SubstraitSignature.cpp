@@ -15,11 +15,15 @@
  */
 
 #include "velox/substrait/SubstraitSignature.h"
+#include <folly/String.h>
+#include <sstream>
+
+using namespace folly;
 
 namespace facebook::velox::substrait {
 
 const std::string SubstraitFunctionSignature::signature() const {
-  std::ostringstream signature;
+  std::stringstream signature;
   signature << name_;
   if (!arguments_.empty()) {
     signature << ":";

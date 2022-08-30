@@ -14,136 +14,117 @@
  * limitations under the License.
  */
 
-#include "velox/common/base/tests/GTestUtils.h"
-
 #include "velox/substrait/SubstraitType.h"
+#include "velox/common/base/tests/GTestUtils.h"
+#include "velox/substrait/TypeUtils.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::substrait;
 
-class SubstraitTypeTest : public ::testing::Test {};
+class SubstraitTypeTest : public ::testing::Test {
+ protected:
+  template <SubstraitTypeKind kind>
+  void testDecode(const std::string& rawType, const std::string& signature) {
+    const auto& type = SubstraitType::decode(rawType);
+    ASSERT_TRUE(type->kind() == kind);
+    ASSERT_EQ(type->signature(), signature);
+  }
 
-TEST_F(SubstraitTypeTest, bool_test) {
-  auto boolType = SubstraitType::decode("boolean");
-  ASSERT_TRUE(boolType->kind() == SubstraitTypeKind::kBool);
-  ASSERT_EQ(boolType->signature(), "bool");
+  template <class T>
+  void testDecode(
+      const std::string& rawType,
+      const std::function<void(const std::shared_ptr<const T>&)>&
+          typeCallBack) {
+    const auto& type = SubstraitType::decode(rawType);
+    if (typeCallBack) {
+      typeCallBack(std::dynamic_pointer_cast<const T>(type));
+    }
+  }
+};
 
-  boolType = SubstraitType::decode("BOOLEAN");
-  ASSERT_TRUE(boolType->kind() == SubstraitTypeKind::kBool);
-  ASSERT_EQ(boolType->signature(), "bool");
-}
+TEST_F(SubstraitTypeTest, decodeTest) {
+  testDecode<SubstraitTypeKind::kI32>("i32?", "i32");
+  testDecode<SubstraitTypeKind::kBool>("BOOLEAN", "bool");
+  testDecode<SubstraitTypeKind::kBool>("boolean", "bool");
+  testDecode<SubstraitTypeKind::kI8>("i8", "i8");
+  testDecode<SubstraitTypeKind::kI16>("i16", "i16");
+  testDecode<SubstraitTypeKind::kI32>("i32", "i32");
+  testDecode<SubstraitTypeKind::kI64>("i64", "i64");
+  testDecode<SubstraitTypeKind::kFp32>("fp32", "fp32");
+  testDecode<SubstraitTypeKind::kFp64>("fp64", "fp64");
+  testDecode<SubstraitTypeKind::kBinary>("binary", "vbin");
+  testDecode<SubstraitTypeKind::kTimestamp>("timestamp", "ts");
+  testDecode<SubstraitTypeKind::kDate>("date", "date");
+  testDecode<SubstraitTypeKind::kTime>("time", "time");
+  testDecode<SubstraitTypeKind::kIntervalDay>("interval_day", "iday");
+  testDecode<SubstraitTypeKind::kIntervalYear>("interval_year", "iyear");
+  testDecode<SubstraitTypeKind::kTimestampTz>("timestamp_tz", "tstz");
+  testDecode<SubstraitTypeKind::kUuid>("uuid", "uuid");
 
-TEST_F(SubstraitTypeTest, i8_test) {
-  auto type = SubstraitType::decode("i8");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kI8);
-  ASSERT_EQ(type->signature(), "i8");
-}
+  testDecode<SubstraitFixedCharType>(
+      "fixedchar<L1>",
+      [](const std::shared_ptr<const SubstraitFixedCharType>& typePtr) {
+        ASSERT_EQ(typePtr->length()->value(), "L1");
+        ASSERT_EQ(typePtr->signature(), "fchar<L1>");
+      });
 
-TEST_F(SubstraitTypeTest, i16_test) {
-  auto type = SubstraitType::decode("i16");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kI16);
-  ASSERT_EQ(type->signature(), "i16");
-}
+  testDecode<SubstraitFixedBinaryType>(
+      "fixedbinary<L1>",
+      [](const std::shared_ptr<const SubstraitFixedBinaryType>& typePtr) {
+        ASSERT_EQ(typePtr->length()->value(), "L1");
+        ASSERT_EQ(typePtr->signature(), "fbin<L1>");
+      });
 
-TEST_F(SubstraitTypeTest, i32_test) {
-  auto type = SubstraitType::decode("i32");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kI32);
-  ASSERT_EQ(type->signature(), "i32");
-}
+  testDecode<SubstraitVarcharType>(
+      "varchar<L1>",
+      [](const std::shared_ptr<const SubstraitVarcharType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "vchar<L1>");
+        ASSERT_EQ(typePtr->length()->value(), "L1");
+      });
 
-TEST_F(SubstraitTypeTest, i64_test) {
-  auto type = SubstraitType::decode("i64");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kI64);
-  ASSERT_EQ(type->signature(), "i64");
-}
+  testDecode<SubstraitDecimalType>(
+      "decimal<P,S>",
+      [](const std::shared_ptr<const SubstraitDecimalType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "dec<P,S>");
+        ASSERT_EQ(typePtr->precision(), "P");
+        ASSERT_EQ(typePtr->scale(), "S");
+      });
 
-TEST_F(SubstraitTypeTest, fp32_test) {
-  auto type = SubstraitType::decode("fp32");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kFp32);
-  ASSERT_EQ(type->signature(), "fp32");
-}
+  testDecode<SubstraitStructType>(
+      "struct<i32,i64,string>",
+      [](const std::shared_ptr<const SubstraitStructType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "struct<i32,i64,str>");
+      });
 
-TEST_F(SubstraitTypeTest, fp64_test) {
-  auto type = SubstraitType::decode("fp64");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kFp64);
-  ASSERT_EQ(type->signature(), "fp64");
-}
+  testDecode<SubstraitStructType>(
+      "struct<i32,i64,struct<string,string>>",
+      [](const std::shared_ptr<const SubstraitStructType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "struct<i32,i64,struct<str,str>>");
+      });
 
-TEST_F(SubstraitTypeTest, decimal_test) {
-  auto type = SubstraitType::decode("decimal<P1,S1>");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kDecimal);
-  auto decimalType =
-      std::dynamic_pointer_cast<const SubstraitDecimalType>(type);
-  ASSERT_EQ(decimalType->signature(), "dec<P1,S1>");
-  ASSERT_EQ(decimalType->precision(), "P1");
-  ASSERT_EQ(decimalType->scale(), "S1");
-}
+  testDecode<SubstraitListType>(
+      "list<string>",
+      [](const std::shared_ptr<const SubstraitListType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "list<str>");
+      });
 
-TEST_F(SubstraitTypeTest, string_test) {
-  auto type = SubstraitType::decode("string");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kString);
-  ASSERT_EQ(type->signature(), "str");
-}
+  testDecode<SubstraitMapType>(
+      "map<string,i32>",
+      [](const std::shared_ptr<const SubstraitMapType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "map<str,i32>");
+      });
 
-TEST_F(SubstraitTypeTest, binary_test) {
-  auto type = SubstraitType::decode("binary");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kBinary);
-  ASSERT_EQ(type->signature(), "vbin");
-}
+  testDecode<SubstraitStringLiteralType>(
+      "any1",
+      [](const std::shared_ptr<const SubstraitStringLiteralType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "any1");
+        ASSERT_TRUE(typePtr->isWildcard());
+      });
 
-TEST_F(SubstraitTypeTest, timestamp_test) {
-  auto type = SubstraitType::decode("timestamp");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kTimestamp);
-  ASSERT_EQ(type->signature(), "ts");
-}
-
-TEST_F(SubstraitTypeTest, timestamp_tz_test) {
-  auto type = SubstraitType::decode("timestamp_tz");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kTimestampTz);
-  ASSERT_EQ(type->signature(), "tstz");
-}
-
-TEST_F(SubstraitTypeTest, date_test) {
-  auto type = SubstraitType::decode("date");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kDate);
-  ASSERT_EQ(type->signature(), "date");
-}
-
-TEST_F(SubstraitTypeTest, time_test) {
-  auto type = SubstraitType::decode("time");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kTime);
-  ASSERT_EQ(type->signature(), "time");
-}
-
-TEST_F(SubstraitTypeTest, interval_day_test) {
-  auto type = SubstraitType::decode("interval_day");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kIntervalDay);
-  ASSERT_EQ(type->signature(), "iday");
-}
-
-TEST_F(SubstraitTypeTest, interval_year_test) {
-  auto type = SubstraitType::decode("interval_year");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kIntervalYear);
-  ASSERT_EQ(type->signature(), "iyear");
-}
-
-TEST_F(SubstraitTypeTest, uuid_test) {
-  auto type = SubstraitType::decode("uuid");
-  ASSERT_TRUE(type->kind() == SubstraitTypeKind::kUuid);
-  ASSERT_EQ(type->signature(), "uuid");
-}
-//    SUBSTRAIT_SCALAR_TYPE_MAPPING(kUuid),
-
-TEST_F(SubstraitTypeTest, fromBool) {
-  auto boolType = SubstraitType::decode("i8");
-  ASSERT_TRUE(boolType->kind() == SubstraitTypeKind::kI8);
-  auto unknown = SubstraitType::decode("unknown");
-  ASSERT_TRUE(unknown->isUnknown());
-  auto any = SubstraitType::decode("any1");
-  ASSERT_TRUE(any->isWildcard());
-}
-
-TEST_F(SubstraitTypeTest, fromVelox) {
-  auto boolType = SubstraitType::fromVelox(BOOLEAN());
-  ASSERT_TRUE(boolType->kind() == SubstraitTypeKind::kBool);
+  testDecode<SubstraitUsedDefinedType>(
+      "unknown",
+      [](const std::shared_ptr<const SubstraitUsedDefinedType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "u!name");
+        ASSERT_TRUE(typePtr->isUnknown());
+      });
 }

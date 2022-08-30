@@ -16,7 +16,7 @@
 
 #include "velox/substrait/VeloxToSubstraitPlan.h"
 #include "VeloxToSubstraitMappings.h"
-#include "velox/substrait/TypeUtils.h"
+#include "velox/substrait/ExprUtils.h"
 
 namespace facebook::velox::substrait {
 

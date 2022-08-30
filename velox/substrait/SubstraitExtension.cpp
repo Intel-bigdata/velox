@@ -36,27 +36,42 @@ static bool decodeFunctionVariant(
     while (std::getline(ss, lastReturnType, '\n')) {
     }
     function.returnType = SubstraitType::decode(lastReturnType);
-    auto& args = node["args"];
-    if (args && args.IsSequence()) {
-      for (auto& arg : args) {
-        if (arg["options"]) { // enum argument
-          auto enumArgument = std::make_shared<SubstraitEnumArgument>(
-              arg.as<SubstraitEnumArgument>());
-          function.arguments.emplace_back(enumArgument);
-        } else if (arg["value"]) { // value argument
-          auto valueArgument = std::make_shared<SubstraitValueArgument>(
-              arg.as<SubstraitValueArgument>());
-          function.arguments.emplace_back(valueArgument);
-        } else { // type argument
-          auto typeArgument = std::make_shared<SubstraitTypeArgument>(
-              arg.as<SubstraitTypeArgument>());
-          function.arguments.emplace_back(typeArgument);
-        }
+  }
+  auto& args = node["args"];
+  if (args && args.IsSequence()) {
+    for (auto& arg : args) {
+      if (arg["options"]) { // enum argument
+        auto enumArgument = std::make_shared<SubstraitEnumArgument>(
+            arg.as<SubstraitEnumArgument>());
+        function.arguments.emplace_back(enumArgument);
+      } else if (arg["value"]) { // value argument
+        auto valueArgument = std::make_shared<SubstraitValueArgument>(
+            arg.as<SubstraitValueArgument>());
+        function.arguments.emplace_back(valueArgument);
+      } else { // type argument
+        auto typeArgument = std::make_shared<SubstraitTypeArgument>(
+            arg.as<SubstraitTypeArgument>());
+        function.arguments.emplace_back(typeArgument);
       }
     }
-    return true;
   }
-  return false;
+
+  auto& variadic = node["variadic"];
+  if (variadic) {
+    auto& min = variadic["min"];
+    auto& max = variadic["max"];
+    if (min) {
+      function.variadic = std::make_optional<SubstraitFunctionVariadic>(
+          {min.as<int>(),
+           max ? std::make_optional<int>(max.as<int>()) : std::nullopt});
+    } else {
+      function.variadic = std::nullopt;
+    }
+  } else {
+    function.variadic = std::nullopt;
+  }
+
+  return true;
 }
 
 template <>
@@ -110,7 +125,7 @@ struct convert<SubstraitAggregateFunctionVariant> {
   static bool decode(
       const Node& node,
       SubstraitAggregateFunctionVariant& function) {
-    auto res = decodeFunctionVariant(node, function);
+    const auto& res = decodeFunctionVariant(node, function);
     if (res) {
       const auto& intermediate = node["intermediate"];
       if (intermediate) {
@@ -246,7 +261,12 @@ std::string getSubstraitExtensionAbsolutePath() {
 } // namespace
 
 std::shared_ptr<SubstraitExtension> SubstraitExtension::loadExtension() {
-  std::vector<std::string> extensionFiles = {
+  static const auto& extension = loadDefault();
+  return extension;
+}
+
+std::shared_ptr<SubstraitExtension> SubstraitExtension::loadDefault() {
+  static const std::vector<std::string> extensionFiles = {
       "functions_aggregate_approx.yaml",
       "functions_aggregate_generic.yaml",
       "functions_arithmetic.yaml",

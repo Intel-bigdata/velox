@@ -25,290 +25,189 @@ using namespace facebook::velox::substrait;
 class SubstraitFunctionLookupTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    extension = SubstraitExtension::loadExtension();
-    mappings = std::make_shared<const VeloxToSubstraitFunctionMappings>();
-    scalarFunctionLookup =
-        std::make_shared<SubstraitScalarFunctionLookup>(extension, mappings);
-    aggregateFunctionLookup =
-        std::make_shared<SubstraitAggregateFunctionLookup>(extension, mappings);
+    extension_ = SubstraitExtension::loadExtension();
+    mappings_ = std::make_shared<const VeloxToSubstraitFunctionMappings>();
+    scalarFunctionLookup_ =
+        std::make_shared<SubstraitScalarFunctionLookup>(extension_, mappings_);
+    aggregateFunctionLookup_ =
+        std::make_shared<SubstraitAggregateFunctionLookup>(
+            extension_, mappings_);
     const auto& testExtension = SubstraitExtension::loadExtension(
         {getDataPath() + "functions_test.yaml"});
-    testScalarFunctionLookup = std::make_shared<SubstraitScalarFunctionLookup>(
-        testExtension, mappings);
+    testScalarFunctionLookup_ = std::make_shared<SubstraitScalarFunctionLookup>(
+        testExtension, mappings_);
+  }
+
+  void testScalarFunctionLookup(
+      const std::string& name,
+      const std::vector<SubstraitTypePtr>& arguments,
+      const SubstraitTypePtr& returnType,
+      const std::string& outputSignature) {
+    const auto& functionSignature =
+        SubstraitFunctionSignature::of(name, arguments, returnType);
+    const auto& functionOption =
+        scalarFunctionLookup_->lookupFunction(functionSignature);
+
+    ASSERT_TRUE(functionOption.has_value());
+    ASSERT_EQ(functionOption.value()->anchor().key, outputSignature);
+  }
+
+  void testAggregateFunctionLookup(
+      const std::string& name,
+      const std::vector<SubstraitTypePtr>& arguments,
+      const SubstraitTypePtr& returnType,
+      const std::string& outputSignature) {
+    const auto& functionSignature =
+        SubstraitFunctionSignature::of(name, arguments, returnType);
+    const auto& functionOption =
+        aggregateFunctionLookup_->lookupFunction(functionSignature);
+
+    ASSERT_TRUE(functionOption.has_value());
+    ASSERT_EQ(functionOption.value()->anchor().key, outputSignature);
+  }
+
+  void assertTestSignature(
+      const std::string& name,
+      const std::vector<SubstraitTypePtr>& arguments,
+      const SubstraitTypePtr& returnType,
+      const std::string& outputSignature) {
+    const auto& functionSignature =
+        SubstraitFunctionSignature::of(name, arguments, returnType);
+    const auto& functionOption =
+        testScalarFunctionLookup_->lookupFunction(functionSignature);
+
+    ASSERT_TRUE(functionOption.has_value());
+    ASSERT_EQ(functionOption.value()->anchor().key, outputSignature);
   }
 
  private:
-  std::string getDataPath() {
+  static std::string getDataPath() {
     const std::string absolute_path = __FILE__;
     auto const pos = absolute_path.find_last_of('/');
     return absolute_path.substr(0, pos) + "/data/";
   }
 
- public:
-  SubstraitExtensionPtr extension;
-  SubstraitFunctionMappingsPtr mappings;
-  SubstraitScalarFunctionLookupPtr scalarFunctionLookup;
-  SubstraitAggregateFunctionLookupPtr aggregateFunctionLookup;
-  SubstraitScalarFunctionLookupPtr testScalarFunctionLookup;
+  SubstraitExtensionPtr extension_;
+  SubstraitFunctionMappingsPtr mappings_;
+  SubstraitScalarFunctionLookupPtr scalarFunctionLookup_;
+  SubstraitAggregateFunctionLookupPtr aggregateFunctionLookup_;
+  SubstraitScalarFunctionLookupPtr testScalarFunctionLookup_;
 };
 
-TEST_F(SubstraitFunctionLookupTest, lt_i8_i8) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
+TEST_F(SubstraitFunctionLookupTest, lt) {
+  testScalarFunctionLookup("lt", {kI8(), kI8()}, kBool(), "lt:i8_i8");
 
-      {SUBSTRAIT_TYPE_OF(kI8), SUBSTRAIT_TYPE_OF(kI8)});
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
+  testScalarFunctionLookup("lt", {kI16(), kI16()}, kBool(), "lt:i16_i16");
 
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:i8_i8");
+  testScalarFunctionLookup("lt", {kI32(), kI32()}, kBool(), "lt:i32_i32");
+
+  testScalarFunctionLookup("lt", {kI64(), kI64()}, kBool(), "lt:i64_i64");
+
+  testScalarFunctionLookup("lt", {kFp32(), kFp32()}, kBool(), "lt:fp32_fp32");
+
+  testScalarFunctionLookup("lt", {kFp64(), kFp64()}, kBool(), "lt:fp64_fp64");
 }
 
-TEST_F(SubstraitFunctionLookupTest, lt_i16_i16) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
-      {SUBSTRAIT_TYPE_OF(kI16), SUBSTRAIT_TYPE_OF(kI16)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:i16_i16");
+TEST_F(SubstraitFunctionLookupTest, between) {
+  testScalarFunctionLookup(
+      "between", {kI8(), kI8(), kI8()}, kBool(), "between:i8_i8_i8");
 }
 
-TEST_F(SubstraitFunctionLookupTest, lt_i32_i32) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
-      {SUBSTRAIT_TYPE_OF(kI32), SUBSTRAIT_TYPE_OF(kI32)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
+TEST_F(SubstraitFunctionLookupTest, add) {
+  testScalarFunctionLookup("add", {kI8(), kI8()}, kI8(), "add:opt_i8_i8");
 
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:i32_i32");
+  testScalarFunctionLookup("plus", {kI8(), kI8()}, kI8(), "add:opt_i8_i8");
 }
 
-TEST_F(SubstraitFunctionLookupTest, lt_i64_i64) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
-      {SUBSTRAIT_TYPE_OF(kI64), SUBSTRAIT_TYPE_OF(kI64)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:i64_i64");
+TEST_F(SubstraitFunctionLookupTest, devide) {
+  testScalarFunctionLookup(
+      "divide",
+      {
+          kFp32(),
+          kFp32(),
+      },
+      kFp32(),
+      "divide:opt_opt_fp32_fp32");
 }
 
-TEST_F(SubstraitFunctionLookupTest, lt_fp32_fp32) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
-      {SUBSTRAIT_TYPE_OF(kFp32), SUBSTRAIT_TYPE_OF(kFp32)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
+TEST_F(SubstraitFunctionLookupTest, test) {
+  assertTestSignature(
+      "test",
+      {
+          kFp32(),
+          kFp32(),
+      },
+      kBool(),
+      "test:fp32_fp32");
 
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:fp32_fp32");
+  assertTestSignature(
+      "test",
+      {
+          kI8(),
+          kI16(),
+      },
+      kBool(),
+      "test:i8_i16");
+
+  assertTestSignature(
+      "test",
+      {
+          kI8(),
+          kI16(),
+          kI16(),
+          kI32(),
+      },
+      kBool(),
+      "test:i8_i16_i16_i32");
+
+  assertTestSignature(
+      "test",
+      {
+          kBool(),
+          kBool(),
+          kI16(),
+          kI16(),
+          kI8(),
+      },
+      kBool(),
+      "test:bool_bool_i16_i16_i8");
+
+  assertTestSignature(
+      "test",
+      {
+          kBool(),
+          kI8(),
+          kBool(),
+          kI16(),
+          kI32(),
+      },
+      kBool(),
+      "test:bool_i8_bool_i16_i32");
+
+  assertTestSignature(
+      "test",
+      {
+          kBool(),
+          kI8(),
+          kBool(),
+          kI16(),
+          kI32(),
+      },
+      kBool(),
+      "test:bool_i8_bool_i16_i32");
 }
 
-TEST_F(SubstraitFunctionLookupTest, between_i8_i8_i8) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "between",
-      {SUBSTRAIT_TYPE_OF(kI8), SUBSTRAIT_TYPE_OF(kI8), SUBSTRAIT_TYPE_OF(kI8)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "between");
-  ASSERT_EQ(functionOption.value()->anchor().key, "between:i8_i8_i8");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lt_fp64_fp64) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "lt",
-      {SUBSTRAIT_TYPE_OF(kFp64), SUBSTRAIT_TYPE_OF(kFp64)},
-      SUBSTRAIT_TYPE_OF(kBool));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "lt");
-  ASSERT_EQ(functionOption.value()->anchor().key, "lt:fp64_fp64");
-}
-
-TEST_F(SubstraitFunctionLookupTest, add_i8_i8) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "add",
-      {SUBSTRAIT_TYPE_OF(kI8), SUBSTRAIT_TYPE_OF(kI8)},
-      SUBSTRAIT_TYPE_OF(kI8));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "add:opt_i8_i8");
-}
-
-TEST_F(SubstraitFunctionLookupTest, plus_i8_i8) {
-  const auto& signature = SubstraitFunctionSignature::of(
-      "plus",
-      {SUBSTRAIT_TYPE_OF(kI8), SUBSTRAIT_TYPE_OF(kI8)},
-      SUBSTRAIT_TYPE_OF(kI8));
-  auto functionOption = scalarFunctionLookup->lookupFunction(signature);
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "add:opt_i8_i8");
-}
-
-TEST_F(SubstraitFunctionLookupTest, plus_i8_i8_i8) {
-  auto functionOption =
-      scalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "plus",
-          {
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kI8),
-          },
-
-          SUBSTRAIT_TYPE_OF(kI8)));
-  // it should match with I8 type
-  ASSERT_FALSE(functionOption.has_value());
-}
-
-TEST_F(SubstraitFunctionLookupTest, add_i8) {
-  auto functionOption =
-      scalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "add",
-          {
-              SUBSTRAIT_TYPE_OF(kI8),
-          },
-          SUBSTRAIT_TYPE_OF(kI8)));
-  // it should match with I8 type
-  ASSERT_FALSE(functionOption.has_value());
-}
-
-TEST_F(SubstraitFunctionLookupTest, devide_fp32_fp32_with_rounding) {
-  auto functionOption =
-      scalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "divide",
-          {
-              SUBSTRAIT_TYPE_OF(kFp32),
-              SUBSTRAIT_TYPE_OF(kFp32),
-          },
-          SUBSTRAIT_TYPE_OF(kFp32)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "divide:opt_opt_fp32_fp32");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupWithAny1Any1) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kFp32),
-              SUBSTRAIT_TYPE_OF(kFp32),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "test:fp32_fp32");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupWithAny1Any2) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kI16),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "test:i8_i16");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupWithi8_any1_any1_any2) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kI32),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "test:i8_i16_i16_i32");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupWithany1_any1_any2_any2_i8) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kI8),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "test:bool_bool_i16_i16_i8");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupWith_any1_i8_any1_i16_any2) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kI32),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_EQ(functionOption.value()->anchor().key, "test:bool_i8_bool_i16_i32");
-}
-
-TEST_F(SubstraitFunctionLookupTest, lookupFailWith_any1_i8_any1_i16_any2) {
-  auto functionOption =
-      testScalarFunctionLookup->lookupFunction(SubstraitFunctionSignature::of(
-          "test",
-          {
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kI8),
-              SUBSTRAIT_TYPE_OF(kBool),
-              SUBSTRAIT_TYPE_OF(kI16),
-              SUBSTRAIT_TYPE_OF(kBool),
-          },
-          SUBSTRAIT_TYPE_OF(kBool)));
-  // it should match with I8 type
-  ASSERT_FALSE(functionOption.has_value());
-}
-
-TEST_F(SubstraitFunctionLookupTest, avg_struct_fp64_i64) {
-  const auto& signature = SubstraitFunctionSignature::of(
+TEST_F(SubstraitFunctionLookupTest, avg) {
+  testAggregateFunctionLookup(
       "avg",
       {SubstraitType::decode("struct<fp64,i64>")},
-      SUBSTRAIT_TYPE_OF(kFp64));
-  auto functionOption = aggregateFunctionLookup->lookupFunction(signature);
+      kFp64(),
+      "avg:opt_fp32");
+}
 
-  // it should match with any type
-  ASSERT_TRUE(functionOption.has_value());
-  ASSERT_TRUE(functionOption.value()->name == "avg");
-  ASSERT_EQ(functionOption.value()->anchor().key, "avg:opt_fp32");
+TEST_F(SubstraitFunctionLookupTest, logical) {
+  testScalarFunctionLookup("and", {kBool(), kBool()}, kBool(), "and:bool");
+  testScalarFunctionLookup("or", {kBool(), kBool()}, kBool(), "or:bool");
+  testScalarFunctionLookup("not", {kBool()}, kBool(), "not:bool");
+  testScalarFunctionLookup("xor", {kBool(), kBool()}, kBool(), "xor:bool_bool");
 }

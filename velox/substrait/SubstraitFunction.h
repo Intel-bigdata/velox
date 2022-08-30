@@ -93,23 +93,22 @@ struct SubstraitFunctionAnchor {
   }
 };
 
+struct SubstraitFunctionVariadic {
+  int min;
+  std::optional<int> max;
+};
+
 struct SubstraitFunctionVariant {
   /// scalar function name.
   std::string name;
   /// scalar function uri.
   std::string uri;
+  /// function arguments.
   std::vector<SubstraitFunctionArgumentPtr> arguments;
   /// return type of scalar function.
   SubstraitTypePtr returnType;
-
-  SubstraitFunctionVariant() {}
-
-  SubstraitFunctionVariant(const SubstraitFunctionVariant& that) {
-    this->name = that.name;
-    this->returnType = that.returnType;
-    this->uri = that.uri;
-    this->arguments = that.arguments;
-  }
+  /// function variadic
+  std::optional<SubstraitFunctionVariadic> variadic;
 
   /// create function signature by given function name and arguments.
   static std::string signature(
@@ -118,20 +117,24 @@ struct SubstraitFunctionVariant {
 
   /// create function signature by function name and arguments.
   const std::string signature() const {
-    return SubstraitFunctionVariant::signature(name, arguments);
+    return signature(name, arguments);
   }
 
   const SubstraitFunctionAnchor anchor() const {
     return {uri, signature()};
   }
 
-  const bool hasWildcardArgument() const {
+  const bool isWildcard() const {
     for (auto& arg : arguments) {
       if (arg->isWildcardType()) {
         return true;
       }
     }
     return false;
+  }
+
+  const bool isVariadic() const {
+    return variadic.has_value();
   }
 
   /// create an new function variant with given arguments.

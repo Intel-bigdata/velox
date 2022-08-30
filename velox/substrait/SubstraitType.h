@@ -17,7 +17,6 @@
 #pragma once
 
 #include <iostream>
-#include "velox/core/ITypedExpr.h"
 #include "velox/substrait/proto/substrait/algebra.pb.h"
 
 namespace facebook::velox::substrait {
@@ -171,31 +170,12 @@ struct SubstraitTypeTraits<SubstraitTypeKind::kUserDefined> {
   static constexpr const char* typeString = "user defined type";
 };
 
-template <TypeKind T>
-class SubstraitTypeCreator;
-
 class SubstraitType {
  public:
   /// deserialize substrait raw type string into Substrait extension  type.
   /// @param rawType - substrait extension raw string type
   static std::shared_ptr<const SubstraitType> decode(
       const std::string& rawType);
-
-  /// Return the Substrait extension type  according to the velox type.
-  static std::shared_ptr<const SubstraitType> fromVelox(const TypePtr& type) {
-    if (type) {
-      return VELOX_DYNAMIC_TYPE_DISPATCH(
-          substraitTypeMaker, type->kind(), type);
-    }
-    return nullptr;
-  }
-
-  /// template class for create SubstraitType by given velox TypeKind
-  template <TypeKind T>
-  static std::shared_ptr<const SubstraitType> substraitTypeMaker(
-      const TypePtr& type) {
-    return SubstraitTypeCreator<T>::create(type);
-  }
 
   /// signature name of substrait type.
   virtual const std::string signature() const = 0;
@@ -230,8 +210,6 @@ class SubstraitType {
 
 using SubstraitTypePtr = std::shared_ptr<const SubstraitType>;
 
-using SubstraitTypePtr = std::shared_ptr<const SubstraitType>;
-
 /// Types used in function argument declarations.
 template <SubstraitTypeKind Kind>
 class SubstraitTypeBase : public SubstraitType {
@@ -248,6 +226,9 @@ class SubstraitTypeBase : public SubstraitType {
     return SubstraitTypeTraits<Kind>::typeString;
   }
 };
+
+template <SubstraitTypeKind Kind>
+class SubstraitScalarType : public SubstraitTypeBase<Kind> {};
 
 /// A string literal type can present the 'any1'
 class SubstraitStringLiteralType : public SubstraitType {
@@ -270,14 +251,7 @@ class SubstraitStringLiteralType : public SubstraitType {
   }
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitStringLiteralType>(
-                other)) {
-      return type->value_ == value_;
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
   const SubstraitTypeKind kind() const override {
     return SubstraitTypeKind ::KIND_NOT_SET;
@@ -304,22 +278,9 @@ class SubstraitDecimalType
         scale_(std::make_shared<SubstraitStringLiteralType>(scale)) {}
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitDecimalType>(other)) {
-      return type->scale_ == scale_ && type->precision_ == precision_;
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
-  const std::string signature() const override {
-    std::stringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << precision_->value() << "," << scale_->value();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
   const std::string precision() const {
     return precision_->value();
@@ -341,22 +302,13 @@ class SubstraitFixedBinaryType
       : length_(length) {}
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitFixedBinaryType>(other)) {
-      return type->length_ == length_;
-    }
-    return false;
+      const std::shared_ptr<const SubstraitType>& other) const override;
+
+  const SubstraitStringLiteralTypePtr& length() const {
+    return length_;
   }
 
-  const std::string signature() const override {
-    std::stringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << length_->value();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
  protected:
   SubstraitStringLiteralTypePtr length_;
@@ -369,22 +321,13 @@ class SubstraitFixedCharType
       : length_(length) {}
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitFixedCharType>(other)) {
-      return type->length_ == length_;
-    }
-    return false;
+      const std::shared_ptr<const SubstraitType>& other) const override;
+
+  const SubstraitStringLiteralTypePtr& length() const {
+    return length_;
   }
 
-  const std::string signature() const override {
-    std::ostringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << length_->value();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
  protected:
   SubstraitStringLiteralTypePtr length_;
@@ -397,22 +340,13 @@ class SubstraitVarcharType
       : length_(length) {}
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitVarcharType>(other)) {
-      return type->length_ == length_;
-    }
-    return false;
+      const std::shared_ptr<const SubstraitType>& other) const override;
+
+  const SubstraitStringLiteralTypePtr& length() const {
+    return length_;
   }
 
-  const std::string signature() const override {
-    std::ostringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << length_->value();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
  protected:
   SubstraitStringLiteralTypePtr length_;
@@ -427,22 +361,9 @@ class SubstraitListType : public SubstraitTypeBase<SubstraitTypeKind ::kList> {
   }
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitListType>(other)) {
-      return type->type_->isSameAs(type_);
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
-  const std::string signature() const override {
-    std::ostringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << type_->signature();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
  private:
   SubstraitTypePtr type_;
@@ -455,36 +376,12 @@ class SubstraitStructType
       : children_(types) {}
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitStructType>(other)) {
-      bool sameSize = type->children_.size() == children_.size();
-      if (sameSize) {
-        for (int i = 0; i < children_.size(); i++) {
-          if (!children_[i]->isSameAs(type->children_[i])) {
-            return false;
-          }
-        }
-        return true;
-      }
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
-  const std::string signature() const override {
-    std::ostringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    for (auto it = children_.begin(); it != children_.end(); ++it) {
-      const auto& typeSign = (*it)->signature();
-      if (it == children_.end() - 1) {
-        signature << typeSign;
-      } else {
-        signature << typeSign << ",";
-      }
-    }
-    signature << ">";
-    return signature.str();
+  const std::string signature() const override;
+
+  const std::vector<SubstraitTypePtr>& children() const {
+    return children_;
   }
 
  private:
@@ -507,25 +404,9 @@ class SubstraitMapType : public SubstraitTypeBase<SubstraitTypeKind ::kMap> {
   }
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitMapType>(other)) {
-      return type->keyType_->isSameAs(keyType_) &&
-          type->valueType_->isSameAs(valueType_);
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
-  const std::string signature() const override {
-    std::ostringstream signature;
-    signature << SubstraitTypeBase::signature();
-    signature << "<";
-    signature << keyType_->signature();
-    signature << ",";
-    signature << valueType_->signature();
-    signature << ">";
-    return signature.str();
-  }
+  const std::string signature() const override;
 
  private:
   SubstraitTypePtr keyType_;
@@ -542,13 +423,7 @@ class SubstraitUsedDefinedType
   }
 
   bool isSameAs(
-      const std::shared_ptr<const SubstraitType>& other) const override {
-    if (const auto& type =
-            std::dynamic_pointer_cast<const SubstraitUsedDefinedType>(other)) {
-      return type->value_ == value_;
-    }
-    return false;
-  }
+      const std::shared_ptr<const SubstraitType>& other) const override;
 
   const bool isUnknown() const override {
     return "unknown" == value_;
@@ -568,234 +443,27 @@ struct SubstraitTypeAnchor {
   }
 };
 
-template <TypeKind T>
-class SubstraitTypeCreator {};
-
-#define SUBSTRAIT_TYPE_OF(typeKind)                                  \
-  std::make_shared<SubstraitTypeBase<SubstraitTypeKind ::typeKind>>( \
-      SubstraitTypeBase<SubstraitTypeKind ::typeKind>())
-
-template <>
-class SubstraitTypeCreator<TypeKind::BOOLEAN> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kBool);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::TINYINT> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kI8);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::SMALLINT> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kI16);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::INTEGER> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kI32);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::BIGINT> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kI64);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::REAL> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kFp32);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::DOUBLE> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kFp64);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::VARCHAR> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kVarchar);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::VARBINARY> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kBinary);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::TIMESTAMP> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kTimestamp);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::DATE> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kDate);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::INTERVAL_DAY_TIME> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type = SUBSTRAIT_TYPE_OF(kIntervalDay);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::SHORT_DECIMAL> {
- public:
-  static std::shared_ptr<const SubstraitType> create(const TypePtr& iType) {
-    const auto& decimalType =
-        std::dynamic_pointer_cast<const DecimalType<TypeKind::SHORT_DECIMAL>>(
-            iType);
-
-    static const auto type = std::make_shared<SubstraitDecimalType>(
-        std::to_string(decimalType->precision()),
-        std::to_string(decimalType->scale()));
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::LONG_DECIMAL> {
- public:
-  static std::shared_ptr<const SubstraitType> create(const TypePtr& iType) {
-    const auto& decimalType =
-        std::dynamic_pointer_cast<const DecimalType<TypeKind::LONG_DECIMAL>>(
-            iType);
-    static const auto type = std::make_shared<SubstraitDecimalType>(
-        std::to_string(decimalType->precision()),
-        std::to_string(decimalType->scale()));
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::ARRAY> {
- public:
-  static std::shared_ptr<SubstraitListType> create(const TypePtr& iType) {
-    const auto& arrayType = std::dynamic_pointer_cast<const ArrayType>(iType);
-    static const auto type = std::make_shared<SubstraitListType>(
-        SubstraitType::fromVelox(arrayType->elementType()));
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::MAP> {
- public:
-  static std::shared_ptr<SubstraitMapType> create(const TypePtr& iType) {
-    const auto& mapType = std::dynamic_pointer_cast<const MapType>(iType);
-    static const auto type = std::make_shared<SubstraitMapType>(
-        SubstraitType::fromVelox(mapType->keyType()),
-        SubstraitType::fromVelox(mapType->valueType()));
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::ROW> {
- public:
-  static std::shared_ptr<SubstraitStructType> create(const TypePtr& iType) {
-    const auto& rowType = std::dynamic_pointer_cast<const RowType>(iType);
-
-    std::vector<SubstraitTypePtr> types;
-    types.reserve(rowType->size());
-    for (const auto& type : rowType->children()) {
-      types.emplace_back(SubstraitType::fromVelox(type));
-    }
-    static const auto type = std::make_shared<SubstraitStructType>(types);
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::UNKNOWN> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    static const auto type =
-        std::make_shared<SubstraitUsedDefinedType>("unknown");
-    return type;
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::FUNCTION> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    VELOX_NYI("FUNCTION type not supported.");
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::OPAQUE> {
- public:
-  static SubstraitTypePtr create(TypePtr& iType) {
-    VELOX_NYI("OPAQUE type not supported.");
-  }
-};
-
-template <>
-class SubstraitTypeCreator<TypeKind::INVALID> {
- public:
-  static SubstraitTypePtr create(const TypePtr& iType) {
-    VELOX_NYI("Invalid type not supported.");
-  }
-};
-
-template <SubstraitTypeKind KIND>
-class SubstraitScalarType : public SubstraitTypeBase<KIND> {};
-
-#define SUBSTRAIT_SCALAR_TYPE_MAPPING(typeKind)                           \
-  {                                                                       \
-    SubstraitTypeTraits<SubstraitTypeKind::typeKind>::typeString,         \
-        std::make_shared<SubstraitTypeBase<SubstraitTypeKind::typeKind>>( \
-            SubstraitTypeBase<SubstraitTypeKind::typeKind>())             \
-  }
-
 using SubstraitTypeAnchorPtr = std::shared_ptr<SubstraitTypeAnchor>;
+
+#define SUBSTRAIT_SCALAR_ACCESSOR(KIND) \
+  std::shared_ptr<const SubstraitScalarType<SubstraitTypeKind::KIND>> KIND()
+
+SUBSTRAIT_SCALAR_ACCESSOR(kBool);
+SUBSTRAIT_SCALAR_ACCESSOR(kI8);
+SUBSTRAIT_SCALAR_ACCESSOR(kI16);
+SUBSTRAIT_SCALAR_ACCESSOR(kI32);
+SUBSTRAIT_SCALAR_ACCESSOR(kI64);
+SUBSTRAIT_SCALAR_ACCESSOR(kFp32);
+SUBSTRAIT_SCALAR_ACCESSOR(kFp64);
+SUBSTRAIT_SCALAR_ACCESSOR(kString);
+SUBSTRAIT_SCALAR_ACCESSOR(kBinary);
+SUBSTRAIT_SCALAR_ACCESSOR(kTimestamp);
+SUBSTRAIT_SCALAR_ACCESSOR(kDate);
+SUBSTRAIT_SCALAR_ACCESSOR(kTime);
+SUBSTRAIT_SCALAR_ACCESSOR(kIntervalYear);
+SUBSTRAIT_SCALAR_ACCESSOR(kIntervalDay);
+SUBSTRAIT_SCALAR_ACCESSOR(kTimestampTz);
+SUBSTRAIT_SCALAR_ACCESSOR(kUuid);
 
 } // namespace facebook::velox::substrait
 

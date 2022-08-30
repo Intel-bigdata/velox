@@ -31,13 +31,14 @@ void SubstraitFunctionCollector::addFunctionToPlan(
   std::unordered_map<std::string, SimpleExtensionURI*> uris;
   for (auto& [referenceNum, function] : functions_->forwardMap_) {
     SimpleExtensionURI* extensionUri;
-    if (uris.find(function.uri) == uris.end()) {
+    const auto uri = uris.find(function.uri);
+    if (uri == uris.end()) {
       extensionUri = substraitPlan->add_extension_uris();
       extensionUri->set_extension_uri_anchor(++uriPos);
       extensionUri->set_uri(function.uri);
       uris[function.uri] = extensionUri;
     } else {
-      extensionUri = uris.at(function.uri);
+      extensionUri = uri->second;
     }
 
     auto extensionFunction =
@@ -51,9 +52,10 @@ void SubstraitFunctionCollector::addFunctionToPlan(
 
 int SubstraitFunctionCollector::getFunctionReference(
     const SubstraitFunctionVariantPtr& function) {
-  if (functions_->reverseMap_.find(function->anchor()) !=
-      functions_->reverseMap_.end()) {
-    return functions_->reverseMap_.at(function->anchor());
+  const auto& anchorReference =
+      functions_->reverseMap_.find(function->anchor());
+  if (anchorReference != functions_->reverseMap_.end()) {
+    return anchorReference->second;
   }
   ++functionReference_;
   functions_->put(functionReference_, function->anchor());
@@ -101,8 +103,9 @@ void SubstraitFunctionCollector::addTypeToPlan(
 
 int SubstraitFunctionCollector::getTypeReference(
     const SubstraitTypeAnchorPtr& typeAnchor) {
-  if (types_->reverseMap_.find(*typeAnchor) != types_->reverseMap_.end()) {
-    return types_->reverseMap_.at(*typeAnchor);
+  const auto& anchorReference = types_->reverseMap_.find(*typeAnchor);
+  if (anchorReference != types_->reverseMap_.end()) {
+    return anchorReference->second;
   }
   ++typeReference_;
   types_->put(functionReference_, *typeAnchor);
@@ -116,8 +119,7 @@ SubstraitFunctionCollector::getScalarFunctionVariant(
   const auto& functionAnchor = functions_->forwardMap_.find(referernce);
   if (functionAnchor != functions_->forwardMap_.end()) {
     for (const auto& scalarFunctionVariant : extension.scalarFunctionVariants) {
-      if (scalarFunctionVariant->anchor() ==
-          functions_->forwardMap_.at(referernce)) {
+      if (scalarFunctionVariant->anchor() == functionAnchor->second) {
         return scalarFunctionVariant;
       }
     }
@@ -134,12 +136,12 @@ SubstraitFunctionCollector::getAggregateFunctionVariant(
   if (functionAnchor != functions_->forwardMap_.end()) {
     for (const auto& aggregateFunctionVaraint :
          extension.aggregateFunctionVariants) {
-      if (aggregateFunctionVaraint->anchor() ==
-          functions_->forwardMap_.at(referernce)) {
+      if (aggregateFunctionVaraint->anchor() == functionAnchor->second) {
         return aggregateFunctionVaraint;
       }
     }
   }
+
   VELOX_NYI(
       "Unknown aggregate function id. Make sure that the function id provided was shared in the extensions section of the plan.");
 }

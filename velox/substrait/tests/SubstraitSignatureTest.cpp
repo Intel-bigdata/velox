@@ -21,8 +21,6 @@
 using namespace facebook::velox;
 using namespace facebook::velox::substrait;
 
-class SubstraitSignatureTest : public ::testing::Test {};
-
 class SubstraitFunctionMappingsTest : public SubstraitFunctionMappings {
  public:
   const FunctionMappings scalarMappings() const override {
@@ -33,34 +31,21 @@ class SubstraitFunctionMappingsTest : public SubstraitFunctionMappings {
   }
 };
 
-TEST_F(SubstraitSignatureTest, signatureWithFunctionMappings) {
-  auto testSubstraitFunctionMappings =
-      std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitFunctionSignature ::signature(
-      "plus:opt_i8_i8", testSubstraitFunctionMappings);
-  ASSERT_EQ(signature, "add:opt_i8_i8");
-}
+class SubstraitSignatureTest : public ::testing::Test {
+ protected:
+  void assertSignature(
+      const std::string& inputSignature,
+      const std::string& outputSignature) {
+    auto testSubstraitFunctionMappings =
+        std::make_shared<SubstraitFunctionMappingsTest>();
+    auto signature = SubstraitFunctionSignature ::signature(
+        inputSignature, testSubstraitFunctionMappings);
+    ASSERT_EQ(signature, outputSignature);
+  }
+};
 
-TEST_F(SubstraitSignatureTest, unknowSignatureWithFunctionMappings) {
-  auto testSubstraitFunctionMappings =
-      std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitFunctionSignature ::signature(
-      "abc:opt_i8_i8", testSubstraitFunctionMappings);
-  ASSERT_EQ(signature, "abc:opt_i8_i8");
-}
-
-TEST_F(SubstraitSignatureTest, signatureWithoutTypes) {
-  auto testSubstraitFunctionMappings =
-      std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitFunctionSignature ::signature(
-      "add", testSubstraitFunctionMappings);
-  ASSERT_EQ(signature, "add");
-}
-
-TEST_F(SubstraitSignatureTest, signatureWithoutTypesWithFunctionMappings) {
-  auto testSubstraitFunctionMappings =
-      std::make_shared<SubstraitFunctionMappingsTest>();
-  auto signature = SubstraitFunctionSignature ::signature(
-      "plus", testSubstraitFunctionMappings);
-  ASSERT_EQ(signature, "add");
+TEST_F(SubstraitSignatureTest, signatureTest) {
+  assertSignature("plus:opt_i8_i8", "add:opt_i8_i8");
+  assertSignature("add:opt_i8_i8", "add:opt_i8_i8");
+  assertSignature("add", "add");
 }

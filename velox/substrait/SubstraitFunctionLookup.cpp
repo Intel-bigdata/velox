@@ -20,8 +20,28 @@
 
 namespace facebook::velox::substrait {
 
+namespace {
+
+/// create a new function variant with existing function variant and substrait
+/// signature.
+SubstraitFunctionVariantPtr cloneFunctionVariantWithSignature(
+    SubstraitFunctionVariantPtr substraitFunctionVariant,
+    SubstraitSignaturePtr substraitSignature) {
+  auto functionVariant = *substraitFunctionVariant.get();
+  auto& functionArguments = functionVariant.arguments;
+  functionArguments.clear();
+  functionArguments.reserve(substraitSignature->getArguments().size());
+  for (const auto& argument : substraitSignature->getArguments()) {
+    const auto& valueArgument = std::make_shared<SubstraitValueArgument>();
+    valueArgument->type = argument;
+    functionArguments.emplace_back(valueArgument);
+  }
+  return std::make_shared<SubstraitFunctionVariant>(functionVariant);
+}
+
+} // namespace
+
 SubstraitFunctionLookup::SubstraitFunctionLookup(
-    const bool& forAggregateFunc,
     const std::vector<SubstraitFunctionVariantPtr>& functions,
     const SubstraitFunctionMappingsPtr& functionMappings)
     : functionMappings_(functionMappings) {
@@ -29,20 +49,21 @@ SubstraitFunctionLookup::SubstraitFunctionLookup(
       signatures;
 
   for (const auto& function : functions) {
-    if (signatures.find(function->name) == signatures.end()) {
+    const auto& functionSignature = signatures.find(function->name);
+    if (functionSignature == signatures.end()) {
       std::vector<SubstraitFunctionVariantPtr> nameFunctions;
       nameFunctions.emplace_back(function);
       signatures.insert({function->name, nameFunctions});
     } else {
-      auto& nameFunctions = signatures.at(function->name);
+      auto& nameFunctions = functionSignature->second;
       nameFunctions.emplace_back(function);
     }
   }
 
   for (const auto& [name, signature] : signatures) {
-    auto functionFinder = std::make_shared<SubstraitFunctionFinder>(
-        name, forAggregateFunc, signature);
-    functionSignatures_.insert({name, functionFinder});
+    auto functionFinder =
+        std::make_shared<SubstraitFunctionFinder>(name, signature);
+    functionFinders_.insert({name, functionFinder});
   }
 }
 
@@ -56,44 +77,41 @@ SubstraitFunctionLookup::lookupFunction(
       ? functionMappings.at(functionName)
       : functionName;
 
-  if (functionSignatures_.find(substraitFunctionName) ==
-      functionSignatures_.end()) {
+  if (functionFinders_.find(substraitFunctionName) == functionFinders_.end()) {
     return std::nullopt;
   }
   const auto& newFunctionSignature = SubstraitFunctionSignature::of(
       substraitFunctionName,
       functionSignature->getArguments(),
       functionSignature->getReturnType());
-  const auto& functionFinder = functionSignatures_.at(substraitFunctionName);
+  const auto& functionFinder = functionFinders_.at(substraitFunctionName);
   return functionFinder->lookupFunction(newFunctionSignature);
 }
 
 SubstraitFunctionLookup::SubstraitFunctionFinder::SubstraitFunctionFinder(
     const std::string& name,
-    const bool& forAggregateFunc,
     const std::vector<SubstraitFunctionVariantPtr>& functions)
-    : name_(name), forAggregateFunc_(forAggregateFunc) {
+    : name_(name) {
   for (const auto& function : functions) {
-    directMap_.insert({function->signature(), function});
-    if (function->requiredArguments().size() != function->arguments.size()) {
-      const std::string& functionKey = SubstraitFunctionVariant::signature(
-          function->name, function->requiredArguments());
-      directMap_.insert({functionKey, function});
-    }
-
-    if (const auto& aggregateFunc =
+    if (function->isVariadic()) {
+      functionVariantMatchers_.emplace_back(
+          std::make_shared<VariadicFunctionVariantMatcher>(function));
+    } else if (function->isWildcard()) {
+      functionVariantMatchers_.emplace_back(
+          std::make_shared<WildcardFunctionVariantMatcher>(function));
+    } else {
+      directMap_.insert({function->signature(), function});
+      if (function->requiredArguments().size() != function->arguments.size()) {
+        const std::string& functionKey = SubstraitFunctionVariant::signature(
+            function->name, function->requiredArguments());
+        directMap_.insert({functionKey, function});
+      }
+      if (function->isAggregateFunction()) {
+        const auto& aggregateFunc =
             std::dynamic_pointer_cast<const SubstraitAggregateFunctionVariant>(
-                function)) {
-      intermediateMap_.insert(
-          {aggregateFunc->intermediateSignature(), function});
-    }
-  }
-
-  for (const auto& function : functions) {
-    if (function->hasWildcardArgument()) {
-      const auto& wildcardFuncVariant =
-          std::make_shared<WildcardFunctionVariant>(function);
-      wildcardFunctionVariants_.emplace_back(wildcardFuncVariant);
+                function);
+        directMap_.insert({aggregateFunc->intermediateSignature(), function});
+      }
     }
   }
 }
@@ -104,26 +122,15 @@ SubstraitFunctionLookup::SubstraitFunctionFinder::lookupFunction(
   const auto& types = functionSignature->getArguments();
   const auto& signature = functionSignature->signature();
   /// try to do a direct match
-  if (directMap_.find(signature) != directMap_.end()) {
-    const auto& functionVariant = directMap_.at(signature);
+  const auto& directFunctionVariant = directMap_.find(signature);
+  if (directFunctionVariant != directMap_.end()) {
+    const auto& functionVariant = directFunctionVariant->second;
     const auto& returnType = functionSignature->getReturnType();
     if (returnType && functionSignature->getReturnType() &&
         returnType->isSameAs(functionSignature->getReturnType())) {
       return std::make_optional(functionVariant);
     }
     return std::nullopt;
-  }
-
-  // try to match with intermediate function signature if for aggregate function
-  // lookup.
-  if (forAggregateFunc_ &&
-      intermediateMap_.find(signature) != intermediateMap_.end()) {
-    const auto& functionVariant = intermediateMap_.at(signature);
-    const auto& returnType = functionSignature->getReturnType();
-    if (returnType && functionSignature->getReturnType() &&
-        returnType->isSameAs(functionSignature->getReturnType())) {
-      return std::make_optional(functionVariant);
-    }
   }
 
   // return empty if no arguments
@@ -131,9 +138,9 @@ SubstraitFunctionLookup::SubstraitFunctionFinder::lookupFunction(
     return std::nullopt;
   }
 
-  // try to match with wildcardFunctionVariants_.
-  for (const auto& wildCardFunctionVariant : wildcardFunctionVariants_) {
-    const auto& matched = wildCardFunctionVariant->tryMatch(functionSignature);
+  // try to match with wildcard or variadic function variants.
+  for (const auto& functionVariantMatcher : functionVariantMatchers_) {
+    const auto& matched = functionVariantMatcher->tryMatch(functionSignature);
     if (matched.has_value()) {
       return matched;
     }
@@ -141,8 +148,34 @@ SubstraitFunctionLookup::SubstraitFunctionFinder::lookupFunction(
   return std::nullopt;
 }
 
-SubstraitFunctionLookup::WildcardFunctionVariant::WildcardFunctionVariant(
-    const SubstraitFunctionVariantPtr& functionVariant)
+std::optional<SubstraitFunctionVariantPtr>
+SubstraitFunctionLookup::VariadicFunctionVariantMatcher ::tryMatch(
+    const SubstraitSignaturePtr& signature) const {
+  const auto& arguments = signature->getArguments();
+  const auto& maxArgumentNum = underlying_->variadic->max;
+  if (arguments.size() < underlying_->variadic->min ||
+      maxArgumentNum.has_value() && arguments.size() > maxArgumentNum.value()) {
+    return std::nullopt;
+  }
+
+  const auto& variadicArgument = underlying_->arguments[0];
+
+  for (auto& type : signature->getArguments()) {
+    if (variadicArgument->isValueArgument()) {
+      const auto& variadicValueArgument =
+          std::dynamic_pointer_cast<const SubstraitValueArgument>(
+              variadicArgument);
+      if (!variadicValueArgument->type->isSameAs(type)) {
+        return std::nullopt;
+      }
+    }
+  }
+  return std::make_optional(underlying_);
+}
+
+SubstraitFunctionLookup::WildcardFunctionVariantMatcher::
+    WildcardFunctionVariantMatcher(
+        const SubstraitFunctionVariantPtr& functionVariant)
     : underlying_(functionVariant) {
   std::unordered_map<std::string, int> typeToRef;
   int typeRef = 0;
@@ -159,26 +192,15 @@ SubstraitFunctionLookup::WildcardFunctionVariant::WildcardFunctionVariant(
 }
 
 std::optional<SubstraitFunctionVariantPtr>
-SubstraitFunctionLookup::WildcardFunctionVariant ::tryMatch(
+SubstraitFunctionLookup::WildcardFunctionVariantMatcher ::tryMatch(
     const SubstraitSignaturePtr& signature) const {
-  bool sameTypeTraits = isSameTypeTraits(signature);
-  if (sameTypeTraits) {
-    auto functionVariant = *underlying_.get();
-    auto& arguments = functionVariant.arguments;
-    arguments.clear();
-    arguments.reserve(signature->getArguments().size());
-    std::vector<SubstraitFunctionArgumentPtr> args;
-    for (const auto& argument : signature->getArguments()) {
-      const auto& valueArgument = std::make_shared<SubstraitValueArgument>();
-      valueArgument->type = argument;
-      arguments.emplace_back(valueArgument);
-    }
-    return std::make_shared<SubstraitFunctionVariant>(functionVariant);
+  if (isSameTypeTraits(signature)) {
+    return cloneFunctionVariantWithSignature(underlying_, signature);
   }
   return std::nullopt;
 }
 
-bool SubstraitFunctionLookup::WildcardFunctionVariant::isSameTypeTraits(
+bool SubstraitFunctionLookup::WildcardFunctionVariantMatcher::isSameTypeTraits(
     const SubstraitSignaturePtr& signature) const {
   std::unordered_map<std::string, int> typeToRef;
   std::unordered_map<int, int> signatureTraits;

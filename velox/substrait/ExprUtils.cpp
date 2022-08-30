@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-#include <core/Expressions.h>
+#include "velox/substrait/ExprUtils.h"
 #include "velox/substrait/SubstraitType.h"
-#include "velox/type/Type.h"
 
 namespace facebook::velox::substrait {
 
-/// Return the Velox type according to the typename.
-TypePtr toVeloxType(const std::string& typeName);
+SubstraitSignaturePtr toSubstraitSignature(
+    const core::CallTypedExprPtr& callTypedExpr) {
+  std::vector<SubstraitTypePtr> types;
+  types.reserve(callTypedExpr->inputs().size());
+  for (const auto& input : callTypedExpr->inputs()) {
+    types.emplace_back(fromVelox(input->type()));
+  }
 
-std::string_view getNameBeforeDelimiter(
-    const std::string& compoundName,
-    const std::string& delimiter);
+  return SubstraitFunctionSignature::of(
+      callTypedExpr->name(), types, fromVelox(callTypedExpr->type()));
+}
 
 } // namespace facebook::velox::substrait

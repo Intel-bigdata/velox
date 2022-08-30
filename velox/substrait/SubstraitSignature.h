@@ -31,25 +31,15 @@ class SubstraitFunctionSignature {
       const SubstraitTypePtr& returnType)
       : name_(name), arguments_(arguments), returnType_(returnType) {}
 
+  /// A shortcut method to create shared_ptr of SubstraitFunctionSignature.
   static std::shared_ptr<SubstraitFunctionSignature> of(
       const std::string& name,
-      const std::vector<SubstraitTypePtr>& arguments) {
-    return std::make_shared<SubstraitFunctionSignature>(
-        name, arguments, nullptr);
-  }
-  static std::shared_ptr<SubstraitFunctionSignature> of(
-      const std::string& name,
-      const std::vector<SubstraitTypePtr>& arguments,
-      const SubstraitTypePtr& returnType) {
+      const std::vector<SubstraitTypePtr>& arguments = {},
+      const SubstraitTypePtr& returnType = nullptr) {
     return std::make_shared<SubstraitFunctionSignature>(
         name, arguments, returnType);
   }
 
-  static std::shared_ptr<SubstraitFunctionSignature> of(
-      const std::string name,
-      const SubstraitTypePtr& returnType) {
-    return of(name, {}, returnType);
-  }
   /// Return function signature according to the given function name and
   /// substrait types.
   const std::string signature() const;
