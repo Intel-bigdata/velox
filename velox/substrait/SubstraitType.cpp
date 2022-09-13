@@ -283,8 +283,8 @@ bool SubstraitMapType::isSameAs(
     const std::shared_ptr<const SubstraitType>& other) const {
   if (const auto& type =
           std::dynamic_pointer_cast<const SubstraitMapType>(other)) {
-    return type->keyType_->isSameAs(keyType_) &&
-        type->valueType_->isSameAs(valueType_);
+    return keyType_->isSameAs(type->keyType_) &&
+        valueType_->isSameAs(type->valueType_);
   }
   return false;
 }
@@ -302,7 +302,7 @@ bool SubstraitListType::isSameAs(
     const std::shared_ptr<const SubstraitType>& other) const {
   if (const auto& type =
           std::dynamic_pointer_cast<const SubstraitListType>(other)) {
-    return type->type_->isSameAs(type_);
+    return type_->isSameAs(type->type_);
   }
   return false;
 }
@@ -318,6 +318,9 @@ bool SubstraitUsedDefinedType::isSameAs(
 
 bool SubstraitStringLiteralType::isSameAs(
     const std::shared_ptr<const SubstraitType>& other) const {
+  if (isWildcard()) {
+    return true;
+  }
   if (const auto& type =
           std::dynamic_pointer_cast<const SubstraitStringLiteralType>(other)) {
     return type->value_ == value_;

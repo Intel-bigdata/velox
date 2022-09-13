@@ -147,7 +147,7 @@ scalar_functions:
         return: boolean
   -
     name: "gte"
-    description: less than or equal to
+    description: greater than or equal to
     impls:
       - args:
           - value: timestamp
@@ -171,7 +171,7 @@ scalar_functions:
         return: boolean
   -
     name: "gt"
-    description: less than
+    description: greater than
     impls:
       - args:
           - value: timestamp
@@ -193,3 +193,159 @@ scalar_functions:
           - value: interval_year
           - value: interval_year
         return: boolean
+  -
+    name: year
+    description: Return the year from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name: month
+    description: Return the month from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name: quarter
+    description: Return the quarter from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name: week
+    description: Return the week from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  day
+    description: Return the day from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  day_of_month
+    description: Return the day of month from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  day_of_week
+    description: Return the day of week from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  day_of_year
+    description: Return the day of year from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  year_of_week
+    description: Return the year of week from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  hour
+    description: Return the hour from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  minute
+    description: Return the minute from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64
+  -
+    name:  second
+    description: Return the second from date/timestamp
+    impls:
+      - args:
+          - value: date
+        return: i64
+      - args:
+          - value: timestamp
+        return: i64
+      - args:
+          - value: timestamp_tz
+        return: i64

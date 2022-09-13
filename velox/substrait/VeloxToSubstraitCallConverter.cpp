@@ -24,24 +24,22 @@ VeloxToSubstraitIfThenConverter::convert(
     const core::CallTypedExprPtr& callTypeExpr,
     google::protobuf::Arena& arena,
     SubstraitExprConverter& topLevelConverter) const {
-  if (callTypeExpr->name() != "if") {
+  if (callTypeExpr->name() != "if" && callTypeExpr->name() != "switch") {
     return std::nullopt;
   }
   if (callTypeExpr->inputs().size() % 2 != 1) {
     VELOX_NYI(
-        "Number of arguments are always going to be odd for if/then expression");
+        "Number of arguments are always going to be odd for if/then or switch expression");
   }
 
   auto* substraitExpr =
       google::protobuf::Arena::CreateMessage<::substrait::Expression>(&arena);
   auto ifThenExpr = substraitExpr->mutable_if_then();
-
   auto last = callTypeExpr->inputs().size() - 1;
   for (int i = 0; i < last; i += 2) {
     auto ifClauseExpr = ifThenExpr->add_ifs();
     ifClauseExpr->mutable_if_()->MergeFrom(
         topLevelConverter(callTypeExpr->inputs().at(i)));
-
     ifClauseExpr->mutable_then()->MergeFrom(
         topLevelConverter(callTypeExpr->inputs().at(i + 1)));
   }

@@ -205,9 +205,33 @@ TEST_F(SubstraitFunctionLookupTest, avg) {
       "avg:opt_fp32");
 }
 
+TEST_F(SubstraitFunctionLookupTest, functionSet) {
+  testScalarFunctionLookup(
+      "in",
+      {kI32(), SubstraitType::decode("list<i32>")},
+      kBool(),
+      "in:i32_list<i32>");
+}
+
 TEST_F(SubstraitFunctionLookupTest, logical) {
   testScalarFunctionLookup("and", {kBool(), kBool()}, kBool(), "and:bool");
   testScalarFunctionLookup("or", {kBool(), kBool()}, kBool(), "or:bool");
   testScalarFunctionLookup("not", {kBool()}, kBool(), "not:bool");
   testScalarFunctionLookup("xor", {kBool(), kBool()}, kBool(), "xor:bool_bool");
+}
+
+TEST_F(SubstraitFunctionLookupTest, functionString) {
+  testScalarFunctionLookup(
+      "like", {kString(), kString()}, kBool(), "like:str_str");
+  testScalarFunctionLookup(
+      "like",
+      {SubstraitType::decode("varchar<L1>"),
+       SubstraitType::decode("varchar<L2>")},
+      kBool(),
+      "like:vchar<L1>_vchar<L2>");
+  testScalarFunctionLookup(
+      "substr",
+      {kString(), kI64(), kI64()},
+      kString(),
+      "substring:str_i64_i64");
 }

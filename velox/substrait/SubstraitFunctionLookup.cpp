@@ -153,8 +153,9 @@ SubstraitFunctionLookup::VariadicFunctionVariantMatcher ::tryMatch(
     const SubstraitSignaturePtr& signature) const {
   const auto& arguments = signature->getArguments();
   const auto& maxArgumentNum = underlying_->variadic->max;
-  if (arguments.size() < underlying_->variadic->min ||
-      maxArgumentNum.has_value() && arguments.size() > maxArgumentNum.value()) {
+  if ((arguments.size() < underlying_->variadic->min) ||
+      (maxArgumentNum.has_value() &&
+       arguments.size() > maxArgumentNum.value())) {
     return std::nullopt;
   }
 

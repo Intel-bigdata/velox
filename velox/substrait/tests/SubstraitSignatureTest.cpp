@@ -16,6 +16,7 @@
 
 #include "velox/common/base/tests/GTestUtils.h"
 
+#include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/substrait/SubstraitSignature.h"
 
 using namespace facebook::velox;

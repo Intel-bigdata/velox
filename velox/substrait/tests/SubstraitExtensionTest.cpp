@@ -41,16 +41,6 @@ class SubstraitFunctionMappingsTest : public SubstraitFunctionMappings {
   }
 };
 
-TEST_F(SubstraitExtensionTest, loadExtension) {
-  auto extension = SubstraitExtension::loadExtension();
-  /// currently we have 198 scalar function variants defined in substrait
-  /// extension
-  ASSERT_EQ(extension->scalarFunctionVariants.size(), 198);
-  /// currently we have 46 aggregate function variants defined in substrait
-  /// extension
-  ASSERT_EQ(extension->aggregateFunctionVariants.size(), 46);
-}
-
 TEST_F(SubstraitExtensionTest, lookupFunction) {
   auto extension = SubstraitExtension::loadExtension();
   const auto& function = extension->lookupFunction("add:opt_i8_i8");

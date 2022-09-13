@@ -137,15 +137,6 @@ struct SubstraitFunctionVariant {
     return variadic.has_value();
   }
 
-  /// create an new function variant with given arguments.
-  SubstraitFunctionVariant& operator=(const SubstraitFunctionVariant& that) {
-    this->name = that.name;
-    this->uri = that.uri;
-    this->arguments = that.arguments;
-    this->returnType = that.returnType;
-    return *this;
-  }
-
   virtual const bool isAggregateFunction() {
     return false;
   }

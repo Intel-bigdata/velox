@@ -121,6 +121,20 @@ TEST_F(SubstraitTypeTest, decodeTest) {
         ASSERT_TRUE(typePtr->isWildcard());
       });
 
+  testDecode<SubstraitStringLiteralType>(
+      "any",
+      [](const std::shared_ptr<const SubstraitStringLiteralType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "any");
+        ASSERT_TRUE(typePtr->isWildcard());
+      });
+
+  testDecode<SubstraitStringLiteralType>(
+      "T",
+      [](const std::shared_ptr<const SubstraitStringLiteralType>& typePtr) {
+        ASSERT_EQ(typePtr->signature(), "T");
+        ASSERT_TRUE(typePtr->isWildcard());
+      });
+
   testDecode<SubstraitUsedDefinedType>(
       "unknown",
       [](const std::shared_ptr<const SubstraitUsedDefinedType>& typePtr) {

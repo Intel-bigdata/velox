@@ -33,6 +33,7 @@ class VeloxToSubstraitFunctionMappings : public SubstraitFunctionMappings {
         {"mod", "modulus"},
         {"eq", "equal"},
         {"neq", "not_equal"},
+        {"substr", "substring"},
     };
     return scalarMappings;
   };

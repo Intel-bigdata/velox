@@ -247,7 +247,7 @@ class SubstraitStringLiteralType : public SubstraitType {
     return value_;
   }
   const bool isWildcard() const override {
-    return value_.find("any") == 0;
+    return value_.find("any") == 0 || value_ == "T";
   }
 
   bool isSameAs(
