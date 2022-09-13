@@ -17,6 +17,7 @@
 #include "velox/substrait/VeloxToSubstraitPlan.h"
 #include "VeloxToSubstraitMappings.h"
 #include "velox/substrait/ExprUtils.h"
+#include "velox/substrait/JoinUtils.h"
 
 namespace facebook::velox::substrait {
 
@@ -41,35 +42,6 @@ namespace {
           "Unsupported Aggregate Step '{}' in Substrait ",
           mapAggregationStepToName(step));
   }
-}
-
-// Merge the two RowTypePointer into one.
-std::shared_ptr<facebook::velox::RowType> mergeRowTypes(
-    RowTypePtr leftRowTypePtr,
-    RowTypePtr rightRowTypePtr) {
-  std::vector<std::string> names;
-  std::vector<TypePtr> types;
-  // TODO: Swith to RowType::unionWith when it's implemented;
-  // auto joinInputType = leftRowTypePtr->unionWith(rightRowTypePtr);
-  names.insert(
-      names.end(),
-      leftRowTypePtr->names().begin(),
-      leftRowTypePtr->names().end());
-  names.insert(
-      names.end(),
-      rightRowTypePtr->names().begin(),
-      rightRowTypePtr->names().end());
-  types.insert(
-      types.end(),
-      leftRowTypePtr->children().begin(),
-      leftRowTypePtr->children().end());
-  types.insert(
-      types.end(),
-      rightRowTypePtr->children().begin(),
-      rightRowTypePtr->children().end());
-
-  // Union two input RowType.
-  return std::make_shared<RowType>(std::move(names), std::move(types));
 }
 
 // Return true if the join type is supported.
@@ -394,12 +366,6 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
   // JoinNode has exactly two input nodes.
   VELOX_USER_CHECK_EQ(
       2, sources.size(), "Join plan node must have exactly two sources.");
-  // Verify if the join type is supported.
-  if (!checkForSupportJoinType(joinNode)) {
-    VELOX_UNSUPPORTED(
-        "Velox to Substrait translation of this join type not supported yet: {}",
-        joinTypeName(joinNode->joinType()));
-  }
   // Convert the input node.
   toSubstrait(arena, sources[0], joinRel->mutable_left());
   toSubstrait(arena, sources[1], joinRel->mutable_right());
@@ -407,7 +373,7 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
   std::vector<core::TypedExprPtr> joinCondition;
   int numColumns = joinNode->leftKeys().size();
   // Compose the join expression
-  for (int i = 0; i < numColumns; i++) {
+  for (auto i = 0; i < numColumns; i++) {
     joinCondition.emplace_back(std::make_shared<core::CallTypedExpr>(
         BOOLEAN(),
         std::vector<core::TypedExprPtr>{joinNode->leftKeys().at(i),
@@ -415,28 +381,23 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
         "eq"));
   }
 
-  // TODO: Implemented other types of Join.
-  if (joinNode->isInnerJoin()) {
-    // Set the join type.
-    joinRel->set_type(::substrait::JoinRel_JoinType_JOIN_TYPE_INNER);
-    // Integrate the non equi condition.
-    if (joinNode->filter()) {
-      joinCondition.emplace_back(joinNode->filter());
-    }
-    // Generate a single expression.
-    auto joinConditionExpr = joinCondition.size() == 1
-        ? joinCondition.at(0)
-        : std::make_shared<core::CallTypedExpr>(
-              BOOLEAN(), joinCondition, "and");
-    // Set the join expression.
-    joinRel->mutable_expression()->MergeFrom(exprConvertor_->toSubstraitExpr(
-        arena,
-        std::dynamic_pointer_cast<const core::ITypedExpr>(joinConditionExpr),
-        mergeRowTypes(sources[0]->outputType(), sources[1]->outputType())));
+  auto joinType = join::toProto(joinNode->joinType());
+  // Set the join type.
+  joinRel->set_type(joinType);
 
-    joinRel->mutable_common()->mutable_direct();
-    return;
+  auto joinExpression = joinCondition.size() == 1
+      ? joinCondition.at(0)
+      : std::make_shared<core::CallTypedExpr>(BOOLEAN(), joinCondition, "and");
+  joinRel->mutable_expression()->MergeFrom(exprConvertor_->toSubstraitExpr(
+      arena, joinExpression, joinNode->outputType()));
+
+  if (joinNode->filter()) {
+    // Set the join filter.
+    joinRel->mutable_post_join_filter()->MergeFrom(
+        exprConvertor_->toSubstraitExpr(
+            arena, joinNode->filter(), joinNode->outputType()));
   }
+  joinRel->mutable_common()->mutable_direct();
 }
 
 } // namespace facebook::velox::substrait

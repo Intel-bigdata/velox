@@ -15,6 +15,8 @@
  */
 
 #include "velox/substrait/SubstraitToVeloxPlan.h"
+#include "velox/core/Expressions.h"
+#include "velox/substrait/JoinUtils.h"
 #include "velox/substrait/TypeUtils.h"
 #include "velox/substrait/VariantToVectorConverter.h"
 #include "velox/type/Type.h"
@@ -353,6 +355,9 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     splitInfoMap_[planNode->id()] = splitInfo;
     return planNode;
   }
+  if (rel.has_join()) {
+    return toVeloxPlan(rel.join(), pool);
+  }
   VELOX_NYI("Substrait conversion not supported for Rel.");
 }
 
@@ -601,6 +606,69 @@ bool SubstraitVeloxPlanConverter::checkTypeExtension(
 const std::string& SubstraitVeloxPlanConverter::findFunction(
     uint64_t id) const {
   return substraitParser_->findFunctionSpec(functionMap_, id);
+}
+
+core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
+    const ::substrait::JoinRel& join,
+    memory::MemoryPool* pool) {
+  if (!join.has_left() || !join.has_right()) {
+    VELOX_FAIL("Left child Rel and Right child Rel are expected in JoinRel.");
+  }
+  if (!join.has_expression()) {
+    VELOX_FAIL("Join expression is expected in JoinRel.");
+  }
+  if (!join.expression().has_scalar_function()) {
+    VELOX_FAIL("Join expression must be a scalar function in JoinRel.");
+  }
+
+  auto joinType = join::fromProto(join.type());
+  auto leftNode = toVeloxPlan(join.left(), pool);
+  auto rightNode = toVeloxPlan(join.right(), pool);
+  auto outputType = leftNode->outputType()->unionWith(rightNode->outputType());
+  auto filter = join.has_post_join_filter()
+      ? exprConverter_->toVeloxExpr(join.post_join_filter(), outputType)
+      : nullptr;
+
+  auto joinExpression =
+      exprConverter_->toVeloxExpr(join.expression(), outputType);
+
+  if (const auto& callTypedExpr =
+          std::dynamic_pointer_cast<const core::CallTypedExpr>(
+              joinExpression)) {
+
+    std::vector<core::FieldAccessTypedExprPtr> leftKeys;
+    std::vector<core::FieldAccessTypedExprPtr> rightKeys;
+    leftKeys.reserve(callTypedExpr->inputs().size() / 2);
+    rightKeys.reserve(callTypedExpr->inputs().size() / 2);
+
+    //extract left keys and right keys from inputs of callTypedExpr
+    for (auto i = 0; i < callTypedExpr->inputs().size(); i += 2) {
+      const auto& inputs = callTypedExpr->inputs();
+
+      const auto& leftKey =
+          std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+              inputs.at(i));
+      leftKeys.emplace_back(leftKey);
+
+      const auto& rightKey =
+          std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+              inputs.at(i + 1));
+      rightKeys.emplace_back(rightKey);
+    }
+
+    return std::make_shared<core::HashJoinNode>(
+        nextPlanNodeId(),
+        joinType,
+        leftKeys,
+        rightKeys,
+        filter,
+        leftNode,
+        rightNode,
+        outputType);
+  } else {
+    VELOX_FAIL(
+        "Fail to convert Substrait join expression to Velox CallTypedExpression.");
+  }
 }
 
 } // namespace facebook::velox::substrait
