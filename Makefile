@@ -62,7 +62,7 @@ CPU_TARGET ?= "avx"
 FUZZER_SEED ?= 123456
 FUZZER_DURATION_SEC ?= 60
 
-BRANCH ?= "developer"
+BRANCH ?= "BDTK"
 
 all: release			#: Build the release version
 
@@ -117,20 +117,20 @@ fuzzertest: debug
 		--logtostderr=1 \
 		--minloglevel=0
 
-format-fix: 			#: Fix formatting issues in the specified branch, default main
+format-fix: 			#: Fix formatting issues in the specified branch, default BDTK
 	@echo "format-fix base branch is : $(BRANCH)"
 	scripts/check.py format $(BRANCH) --fix
 
-format-check: 			#: Check for formatting issues on the specified branch, default main
+format-check: 			#: Check for formatting issues on the specified branch, default BDTK
 	clang-format --version
 	@echo "format-check base branch is : $(BRANCH)"
 	scripts/check.py format $(BRANCH)
 
-header-fix:				#: Fix license header issues in the specified branch, default main
+header-fix:				#: Fix license header issues in the specified branch, default BDTK
 	@echo "header-fix base branch is : $(BRANCH)"
 	scripts/check.py header $(BRANCH) --fix
 
-header-check:			#: Check for license header issues on the specified branch, default main
+header-check:			#: Check for license header issues on the specified branch, default BDTK
 	@echo "header-check base branch is : $(BRANCH)"
 	scripts/check.py header $(BRANCH)
 
