@@ -16,10 +16,11 @@ name: build and test
 on:
   push:
     branches: 
+      - BDTK
       - WW*
   pull_request:
     branches: 
-      - developer
+      - BDTK
       - WW*
 
 jobs:
@@ -40,13 +41,12 @@ jobs:
 
       - name: Build
         run: |
-          make release NUM_THREADS=16 MAX_HIGH_MEM_JOBS=8 MAX_LINK_JOBS=8
+          make release NUM_THREADS=32 MAX_HIGH_MEM_JOBS=16 MAX_LINK_JOBS=16
 
       - name: Run Unit Tests
         run: |
-          cd _build/release && ctest -j 16
+          cd _build/release && ctest -j 32
 
-      # cd _build/release && ctest -j 16 -VV --output-on-failure
       - name: Run Fuzzer Tests
         run: |
           _build/release/velox/expression/tests/velox_expression_fuzzer_test --seed 123456 --duration_sec 60 --logtostderr=1 --minloglevel=0
