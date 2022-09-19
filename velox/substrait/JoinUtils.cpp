@@ -57,8 +57,7 @@ core::JoinType fromProto(::substrait::JoinRel_JoinType joinType) {
     case ::substrait::JoinRel_JoinType_JOIN_TYPE_ANTI:
       return core::JoinType::kAnti;
     default:
-      VELOX_UNSUPPORTED(
-          "fromProto not supported for substrait join type, {}", joinType);
+      VELOX_UNSUPPORTED("Unsupported substrait join type, {}", joinType);
   }
 }
 
