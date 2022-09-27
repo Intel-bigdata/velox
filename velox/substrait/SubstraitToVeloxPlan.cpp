@@ -667,12 +667,6 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   auto inputTypes = leftNode->outputType()->unionWith(rightNode->outputType());
 
   auto joinType = join::fromProto(sJoin.type());
-  if (core::JoinType::kLeftSemi == joinType ||
-      core::JoinType::kAnti == joinType) {
-    outputRowType = leftNode->outputType();
-  } else if (core::JoinType::kRightSemi == joinType) {
-    outputRowType = rightNode->outputType();
-  }
 
   // extract join keys from join expression
   std::vector<const ::substrait::Expression::FieldReference*> leftExprs,
