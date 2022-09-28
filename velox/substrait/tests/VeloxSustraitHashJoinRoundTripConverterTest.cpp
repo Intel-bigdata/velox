@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <folly/Random.h>
 #include <folly/init/Init.h>
 #include "velox/dwio/common/tests/utils/BatchMaker.h"
 #include "velox/exec/PlanNodeStats.h"
@@ -164,17 +163,15 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, filter) {
 TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftJoin) {
   auto leftVectors = {
       makeRowVector({
-          makeFlatVector<int32_t>({1, 2, 3, 4, 5}),
-          makeNullableFlatVector<int32_t>(
-              {10, std::nullopt, 30, std::nullopt, 50}),
+          makeFlatVector<int32_t>({1, 2, 3}),
+          makeNullableFlatVector<int32_t>({10, std::nullopt, 30}),
       }),
       makeRowVector({
-          makeFlatVector<int32_t>({1, 2, 3, 4, 5}),
-          makeNullableFlatVector<int32_t>(
-              {std::nullopt, 20, 30, std::nullopt, 50}),
+          makeFlatVector<int32_t>({1, 2, 3}),
+          makeNullableFlatVector<int32_t>({std::nullopt, 20, 30}),
       })};
   auto rightVectors = {
-      makeRowVector({makeFlatVector<int32_t>({1, 2, 10, 30, 40})}),
+      makeRowVector({makeFlatVector<int32_t>({1, 2, 10})}),
   };
 
   createDuckDbTable("t", leftVectors);
@@ -194,12 +191,13 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftJoin) {
                       {"u_c0"},
                       buildSide,
                       "c1 + u_c0 > 0",
-                      {"c0", "c1", "u_c0"},
+                      {"c0", "u_c0"},
                       core::JoinType::kLeft)
                   .planNode();
 
   assertPlanConversion(
-      plan, "SELECT * FROM t LEFT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
+      plan,
+      "SELECT t.c0,u.c0  FROM t LEFT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
 }
 
 TEST_F(VeloxSubstraitJoinRoundTripConverterTest, rightJoin) {
@@ -235,11 +233,128 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, rightJoin) {
                       {"u_c0"},
                       buildSide,
                       "c1 + u_c0 > 0",
-                      {"c0", "c1", "u_c0"},
+                      {"c0", "c1"},
                       core::JoinType::kRight)
                   .planNode();
 
   assertPlanConversion(
       plan,
-      "SELECT * FROM t RIGHT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
+      "SELECT t.c0, t.c1 FROM t RIGHT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftSemiJoin) {
+  auto leftVectors = makeRowVector({
+      makeFlatVector<int32_t>(
+          1'234, [](auto row) { return row % 11; }, nullEvery(13)),
+      makeFlatVector<int32_t>(1'234, [](auto row) { return row; }),
+  });
+
+  auto rightVectors = makeRowVector({
+      makeFlatVector<int32_t>(
+          123, [](auto row) { return row % 5; }, nullEvery(7)),
+  });
+
+  createDuckDbTable("t", {leftVectors});
+  createDuckDbTable("u", {rightVectors});
+
+  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto op = PlanBuilder(planNodeIdGenerator)
+                .values({leftVectors})
+                .hashJoin(
+                    {"c0"},
+                    {"u_c0"},
+                    PlanBuilder(planNodeIdGenerator)
+                        .values({rightVectors})
+                        .project({"c0 as u_c0"})
+                        .planNode(),
+                    "",
+                    {"c1"},
+                    core::JoinType::kLeftSemi)
+                .planNode();
+
+  assertPlanConversion(
+      op, "SELECT t.c1 FROM t WHERE t.c0 IN (SELECT c0 FROM u)");
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripConverterTest, fullJoin) {
+  // Left side keys are [0, 1, 2,..10].
+  auto leftVectors = {
+      makeRowVector({
+          makeFlatVector<int32_t>(
+              2'222, [](auto row) { return row % 11; }, nullEvery(13)),
+          makeFlatVector<int32_t>(2'222, [](auto row) { return row; }),
+      }),
+      makeRowVector({
+          makeFlatVector<int32_t>(
+              2'222, [](auto row) { return (row + 3) % 11; }, nullEvery(13)),
+          makeFlatVector<int32_t>(2'222, [](auto row) { return row; }),
+      }),
+  };
+
+  // Right side keys are [-3, -2, -1, 0, 1, 2, 3].
+  auto rightVectors = makeRowVector({
+      makeFlatVector<int32_t>(
+          123, [](auto row) { return -3 + row % 7; }, nullEvery(11)),
+      makeFlatVector<int32_t>(
+          123, [](auto row) { return -111 + row * 2; }, nullEvery(13)),
+  });
+
+  createDuckDbTable("t", leftVectors);
+  createDuckDbTable("u", {rightVectors});
+
+  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+
+  auto buildSide = PlanBuilder(planNodeIdGenerator)
+                       .values({rightVectors})
+                       .project({"c0 AS u_c0", "c1 AS u_c1"})
+                       .planNode();
+
+  auto op = PlanBuilder(planNodeIdGenerator)
+                .values(leftVectors)
+                .hashJoin(
+                    {"c0"},
+                    {"u_c0"},
+                    buildSide,
+                    "",
+                    {"c0", "c1", "u_c1"},
+                    core::JoinType::kFull)
+                .planNode();
+
+  assertPlanConversion(
+      op, "SELECT t.c0, t.c1, u.c1 FROM t FULL OUTER JOIN u ON t.c0 = u.c0");
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripConverterTest, antiJoin) {
+  auto leftVectors = makeRowVector({
+      makeFlatVector<int32_t>(
+          1'000, [](auto row) { return row % 11; }, nullEvery(13)),
+      makeFlatVector<int32_t>(1'000, [](auto row) { return row; }),
+  });
+
+  auto rightVectors = makeRowVector({
+      makeFlatVector<int32_t>(
+          1'234, [](auto row) { return row % 5; }, nullEvery(7)),
+  });
+
+  createDuckDbTable("t", {leftVectors});
+  createDuckDbTable("u", {rightVectors});
+
+  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto op = PlanBuilder(planNodeIdGenerator)
+                .values({leftVectors})
+                .hashJoin(
+                    {"c0"},
+                    {"c0"},
+                    PlanBuilder(planNodeIdGenerator)
+                        .values({rightVectors})
+                        .filter("c0 IS NOT NULL")
+                        .planNode(),
+                    "",
+                    {"c1"},
+                    core::JoinType::kAnti)
+                .planNode();
+
+  assertQuery(
+      op,
+      "SELECT t.c1 FROM t WHERE t.c0 NOT IN (SELECT c0 FROM u WHERE c0 IS NOT NULL)");
 }

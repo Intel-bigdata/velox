@@ -128,7 +128,7 @@ class SubstraitVeloxPlanConverter {
 
   /// Extract join keys from joinExpression.
   /// joinExpression is a boolean condition that describes whether each record
-  /// from the left set �match� the record from the right set. The condition
+  /// from the left set match the record from the right set. The condition
   /// must only include the following operations: AND, ==, field references.
   /// Field references correspond to the direct output order of the data.
   void extractJoinKeys(

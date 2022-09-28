@@ -32,8 +32,6 @@ namespace join {
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_OUTER;
     case core::JoinType::kLeftSemi:
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_SEMI;
-    case core::JoinType::kRightSemi:
-      return ::substrait::JoinRel_JoinType_JOIN_TYPE_SEMI;
     case core::JoinType::kAnti:
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_ANTI;
     default:

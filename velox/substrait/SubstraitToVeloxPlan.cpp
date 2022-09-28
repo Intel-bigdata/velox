@@ -664,9 +664,13 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   auto outputRowType =
       leftNode->outputType()->unionWith(rightNode->outputType());
 
-  auto inputTypes = leftNode->outputType()->unionWith(rightNode->outputType());
-
   auto joinType = join::fromProto(sJoin.type());
+
+  if (joinType == core::JoinType::kLeftSemi) {
+    outputRowType = leftNode->outputType();
+  } else if (joinType == core::JoinType::kRightSemi) {
+    outputRowType = rightNode->outputType();
+  }
 
   // extract join keys from join expression
   std::vector<const ::substrait::Expression::FieldReference*> leftExprs,
@@ -680,10 +684,12 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   leftKeys.reserve(leftExprs.size());
   rightKeys.reserve(leftExprs.size());
   for (size_t i = 0; i < leftExprs.size(); ++i) {
-    leftKeys.emplace_back(
-        exprConverter_->toVeloxExpr(*leftExprs[i], inputTypes));
-    rightKeys.emplace_back(
-        exprConverter_->toVeloxExpr(*rightExprs[i], inputTypes));
+    leftKeys.emplace_back(exprConverter_->toVeloxExpr(
+        *leftExprs[i],
+        leftNode->outputType()->unionWith(rightNode->outputType())));
+    rightKeys.emplace_back(exprConverter_->toVeloxExpr(
+        *rightExprs[i],
+        leftNode->outputType()->unionWith(rightNode->outputType())));
   }
 
   core::TypedExprPtr filter;

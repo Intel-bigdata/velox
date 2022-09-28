@@ -36,3 +36,20 @@ void JsonToProtoConverter::readFromFile(
       status.code(),
       status.message());
 }
+
+std::string JsonToProtoConverter::messageToJson(
+    const google::protobuf::Message& message) {
+  google::protobuf::util::JsonPrintOptions options;
+  options.add_whitespace = true;
+  options.always_print_primitive_fields = true;
+  options.preserve_proto_field_names = true;
+  std::string json;
+  auto status =
+      google::protobuf::util::MessageToJsonString(message, &json, options);
+  VELOX_CHECK(
+      status.ok(),
+      "Failed to convert message to JSON: {} {}",
+      status.code(),
+      status.message());
+  return json;
+}
