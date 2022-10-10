@@ -21,6 +21,7 @@
 
 #include "velox/substrait/VeloxToSubstraitType.h"
 #include "velox/substrait/proto/substrait/algebra.pb.h"
+#include "velox/vector/ConstantVector.h"
 
 namespace facebook::velox::substrait {
 
@@ -97,6 +98,19 @@ class VeloxToSubstraitExprConvertor {
   VeloxToSubstraitTypeConvertorPtr typeConvertor_;
 
   SubstraitExtensionCollectorPtr extensionCollector_;
+
+  /// Convert values in Velox flat vector to Substrait List Literal.
+  template <TypeKind flatKind>
+  void flatVectorToListLiteral(
+      google::protobuf::Arena& arena,
+      const velox::VectorPtr& vector,
+      ::substrait::Expression_Literal_List* listLiteral);
+
+  /// Convert values in Velox complex vector to Substrait Literal.
+  void complexVectorToLiteral(
+      google::protobuf::Arena& arena,
+      std::shared_ptr<velox::ConstantVector<velox::ComplexType>> constantVector,
+      ::substrait::Expression_Literal* substraitLiteral);
 };
 
 using VeloxToSubstraitExprConvertorPtr =

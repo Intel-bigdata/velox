@@ -208,6 +208,69 @@ VeloxToSubstraitExprConvertor::toSubstraitLiteral(
   return *literalExpr;
 }
 
+
+template <TypeKind flatKind>
+void VeloxToSubstraitExprConvertor::flatVectorToListLiteral(
+    google::protobuf::Arena& arena,
+    const velox::VectorPtr& vector,
+    ::substrait::Expression_Literal_List* listLiteral) {
+  using T = typename TypeTraits<flatKind>::NativeType;
+  if (auto flatVector = std::dynamic_pointer_cast<FlatVector<T>>(vector)) {
+    const TypePtr& childType = flatVector->type();
+    for (int idx = 0; idx < flatVector->size(); idx++) {
+      ::substrait::Expression_Literal* childLiteral = listLiteral->add_values();
+      if (flatVector->isNullAt(idx)) {
+        // Process the null value.
+        childLiteral->MergeFrom(
+            exprConvertor_->toSubstraitNullLiteral(arena, childType->kind()));
+      } else {
+        childLiteral->MergeFrom(exprConvertor_->toSubstraitNotNullLiteral(
+            arena, static_cast<const variant>(flatVector->valueAt(idx))));
+      }
+    }
+  } else {
+    VELOX_FAIL("Flat vector is expected.");
+  }
+}
+
+void VeloxToSubstraitExprConvertor::complexVectorToLiteral(
+    google::protobuf::Arena& arena,
+    std::shared_ptr<ConstantVector<ComplexType>> constantVector,
+    ::substrait::Expression_Literal* substraitLiteral) {
+  VELOX_CHECK_EQ(
+      constantVector->size(), 1, "Only one complex vector is expected.");
+  if (auto arrayVector = std::dynamic_pointer_cast<ArrayVector>(
+      constantVector->valueVector())) {
+    VELOX_CHECK_EQ(arrayVector->size(), 1, "Only one array is expected.");
+    if (constantVector->isNullAt(0)) {
+      // Process the null value.
+      substraitLiteral->MergeFrom(exprConvertor_->toSubstraitNullLiteral(   arena, arrayVector->type()->kind()));
+    } else {
+      ::substrait::Expression_Literal_List* listLiteral =
+          google::protobuf::Arena::CreateMessage<
+              ::substrait::Expression_Literal_List>(&arena);
+      if (arrayVector->elements()->isScalar()) {
+        VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
+            flatVectorToListLiteral,
+            arrayVector->elements()->type()->kind(),
+            arena,
+            arrayVector->elements(),
+            listLiteral);
+        substraitLiteral->mutable_list()->MergeFrom(*listLiteral);
+      } else {
+        VELOX_NYI(
+            "To Substrait literal is not supported for {}.",
+         arrayVector->elements()->type()->toString());
+      }
+    }
+  } else {
+    VELOX_NYI(
+        "To Substrait literal is not supported for {}.",
+        constantVector->type()->toString());
+  }
+}
+
+
 const ::substrait::Expression_Literal&
 VeloxToSubstraitExprConvertor::toSubstraitLiteral(
     google::protobuf::Arena& arena,
@@ -217,13 +280,23 @@ VeloxToSubstraitExprConvertor::toSubstraitLiteral(
       google::protobuf::Arena::CreateMessage<::substrait::Expression_Literal>(
           &arena);
 
-  VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
-      convertVectorValue,
-      vectorValue->type()->kind(),
-      arena,
-      vectorValue,
-      litValue,
-      substraitField);
+if(vectorValue->isScalar()){
+    VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
+        convertVectorValue,
+        vectorValue->type()->kind(),
+        arena,
+        vectorValue,
+        litValue,
+        substraitField);
+  } else if (
+      auto constantVector =
+          std::dynamic_pointer_cast<ConstantVector<ComplexType>>(vectorValue)) {
+    complexVectorToLiteral(arena, constantVector, substraitField);
+  } else {
+    VELOX_NYI(
+        "To Substrait literal is not supported for {}.",
+        vectorValue->type()->toString());
+  }
 
   return *substraitField;
 }
@@ -364,6 +437,15 @@ VeloxToSubstraitExprConvertor::toSubstraitNullLiteral(
       nullValue->set_nullability(
           ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
       substraitField->mutable_null()->set_allocated_fp64(nullValue);
+      break;
+    }
+    case velox::TypeKind::ARRAY: {
+      ::substrait::Type_List* nullValue =
+          google::protobuf::Arena::CreateMessage<::substrait::Type_List>(
+              &arena);
+      nullValue->set_nullability(
+          ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
+      substraitField->mutable_null()->set_allocated_list(nullValue);
       break;
     }
     case velox::TypeKind::UNKNOWN: {
