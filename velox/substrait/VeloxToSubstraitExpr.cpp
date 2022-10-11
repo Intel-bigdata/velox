@@ -208,7 +208,6 @@ VeloxToSubstraitExprConvertor::toSubstraitLiteral(
   return *literalExpr;
 }
 
-
 template <TypeKind flatKind>
 void VeloxToSubstraitExprConvertor::flatVectorToListLiteral(
     google::protobuf::Arena& arena,
@@ -240,11 +239,12 @@ void VeloxToSubstraitExprConvertor::complexVectorToLiteral(
   VELOX_CHECK_EQ(
       constantVector->size(), 1, "Only one complex vector is expected.");
   if (auto arrayVector = std::dynamic_pointer_cast<ArrayVector>(
-      constantVector->valueVector())) {
+          constantVector->valueVector())) {
     VELOX_CHECK_EQ(arrayVector->size(), 1, "Only one array is expected.");
     if (constantVector->isNullAt(0)) {
       // Process the null value.
-      substraitLiteral->MergeFrom(exprConvertor_->toSubstraitNullLiteral(   arena, arrayVector->type()->kind()));
+      substraitLiteral->MergeFrom(exprConvertor_->toSubstraitNullLiteral(
+          arena, arrayVector->type()->kind()));
     } else {
       ::substrait::Expression_Literal_List* listLiteral =
           google::protobuf::Arena::CreateMessage<
@@ -260,7 +260,7 @@ void VeloxToSubstraitExprConvertor::complexVectorToLiteral(
       } else {
         VELOX_NYI(
             "To Substrait literal is not supported for {}.",
-         arrayVector->elements()->type()->toString());
+            arrayVector->elements()->type()->toString());
       }
     }
   } else {
@@ -269,7 +269,6 @@ void VeloxToSubstraitExprConvertor::complexVectorToLiteral(
         constantVector->type()->toString());
   }
 }
-
 
 const ::substrait::Expression_Literal&
 VeloxToSubstraitExprConvertor::toSubstraitLiteral(
@@ -280,7 +279,7 @@ VeloxToSubstraitExprConvertor::toSubstraitLiteral(
       google::protobuf::Arena::CreateMessage<::substrait::Expression_Literal>(
           &arena);
 
-if(vectorValue->isScalar()){
+  if (vectorValue->isScalar()) {
     VELOX_DYNAMIC_SCALAR_TYPE_DISPATCH(
         convertVectorValue,
         vectorValue->type()->kind(),
