@@ -572,7 +572,16 @@ class variant {
     } else if (kind_ == TypeKind::LONG_DECIMAL) {
       return !value<TypeKind::LONG_DECIMAL>().hasValue();
     }
-    return ptr_ == nullptr;
+    // There will be -inf when all rows are null in final AVG.
+    // TODO(yizhong): remove this after Arrow is supported in Cider.
+    if (ptr_ == nullptr) {
+      return true;
+    }
+    return kind_ == TypeKind::DOUBLE &&
+        (reinterpret_cast<const double*>(ptr_)[0] ==
+             -std::numeric_limits<double>::infinity() ||
+         reinterpret_cast<const double*>(ptr_)[0] ==
+             std::numeric_limits<double>::infinity());
   }
 
   uint64_t hash() const;
