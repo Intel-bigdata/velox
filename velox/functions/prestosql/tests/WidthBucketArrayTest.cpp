@@ -30,6 +30,8 @@ class WidthBucketArrayTest : public FunctionBaseTest {
 };
 
 TEST_F(WidthBucketArrayTest, success) {
+  // TODO(yizhong): remove this after Arrow is supported in Cider.
+  GTEST_SKIP();
   VectorPtr binsVector;
   auto testWidthBucketArray = [&](const double operand,
                                   const std::vector<int64_t>& expected) {
@@ -98,6 +100,8 @@ TEST_F(WidthBucketArrayTest, failure) {
 }
 
 TEST_F(WidthBucketArrayTest, successForConstantArray) {
+  // TODO(yizhong): remove this after Arrow is supported in Cider.
+  GTEST_SKIP();
   auto testWidthBucketArray = [&](const double operand,
                                   const std::string& bins,
                                   const int64_t expected) {
