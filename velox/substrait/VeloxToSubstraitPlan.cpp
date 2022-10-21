@@ -15,8 +15,6 @@
  */
 
 #include "velox/substrait/VeloxToSubstraitPlan.h"
-#include "VeloxToSubstraitMappings.h"
-#include "velox/substrait/ExprUtils.h"
 #include "velox/substrait/JoinUtils.h"
 
 namespace facebook::velox::substrait {
@@ -44,55 +42,7 @@ namespace {
   }
 }
 
-// Return true if the join type is supported.
-bool checkForSupportJoinType(
-    const std::shared_ptr<const core::AbstractJoinNode>& nodePtr) {
-  // TODO: Implemented other types of Join.
-  return nodePtr->isInnerJoin();
-}
-
 } // namespace
-
-VeloxToSubstraitPlanConvertor::VeloxToSubstraitPlanConvertor()
-    : VeloxToSubstraitPlanConvertor(
-          SubstraitExtension::loadExtension(),
-          VeloxToSubstraitFunctionMappings::make()) {}
-
-VeloxToSubstraitPlanConvertor::VeloxToSubstraitPlanConvertor(
-    const SubstraitExtensionPtr& substraitExtension,
-    const SubstraitFunctionMappingsPtr& functionMappings) {
-  // Construct the extension collector
-  functionCollector_ = std::make_shared<SubstraitFunctionCollector>();
-
-  auto substraitTypeLookup =
-      std::make_shared<SubstraitTypeLookup>(substraitExtension->types);
-  typeConvertor_ = std::make_shared<VeloxToSubstraitTypeConvertor>(
-      functionCollector_, substraitTypeLookup);
-  // Construct the scalar function lookup
-  auto scalarFunctionLookup =
-      std::make_shared<const SubstraitScalarFunctionLookup>(
-          substraitExtension, functionMappings);
-
-  // Construct the if/Then call converter
-  auto ifThenCallConverter =
-      std::make_shared<VeloxToSubstraitIfThenConverter>();
-  // Construct the scalar function converter.
-  auto scalaFunctionConverter =
-      std::make_shared<VeloxToSubstraitScalarFunctionConverter>(
-          scalarFunctionLookup, functionCollector_, typeConvertor_);
-
-  std::vector<VeloxToSubstraitCallConverterPtr> callConvertors;
-  callConvertors.push_back(ifThenCallConverter);
-  callConvertors.push_back(scalaFunctionConverter);
-
-  // Construct the expression converter.
-  exprConvertor_ = std::make_shared<VeloxToSubstraitExprConvertor>(
-      typeConvertor_, callConvertors);
-
-  // Construct the aggregate function lookup
-  aggregateFunctionLookup_ = std::make_shared<SubstraitAggregateFunctionLookup>(
-      substraitExtension, functionMappings);
-}
 
 ::substrait::Plan& VeloxToSubstraitPlanConvertor::toSubstrait(
     google::protobuf::Arena& arena,
@@ -400,8 +350,8 @@ void VeloxToSubstraitPlanConvertor::toSubstraitJoin(
   for (auto i = 0; i < numColumns; i++) {
     joinCondition.emplace_back(std::make_shared<core::CallTypedExpr>(
         BOOLEAN(),
-        std::vector<core::TypedExprPtr>{joinNode->leftKeys().at(i),
-                                        joinNode->rightKeys().at(i)},
+        std::vector<core::TypedExprPtr>{
+            joinNode->leftKeys().at(i), joinNode->rightKeys().at(i)},
         "eq"));
   }
 

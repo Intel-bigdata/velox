@@ -20,11 +20,6 @@
 
 namespace facebook::velox::substrait {
 
-VeloxToSubstraitTypeConvertor::VeloxToSubstraitTypeConvertor(
-    const SubstraitFunctionCollectorPtr& functionCollector,
-    const SubstraitTypeLookupPtr& typeLookup)
-    : functionCollector_(functionCollector), typeLookup_(typeLookup) {}
-
 const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
     google::protobuf::Arena& arena,
     const velox::TypePtr& type) const {
@@ -173,21 +168,14 @@ const ::substrait::Type& VeloxToSubstraitTypeConvertor::toSubstraitType(
       break;
     }
     case velox::TypeKind::UNKNOWN: {
-      //velox unknown type binding to substrait unknown type
-      const auto& substraitTypeAnchor = typeLookup_->lookupUnknownType();
-      if (substraitTypeAnchor.has_value()) {
-        auto substraitUserDefined = google::protobuf::Arena::CreateMessage<
-            ::substrait::Type_UserDefined>(&arena);
-        substraitUserDefined->set_type_reference(
-            functionCollector_->getTypeReference(substraitTypeAnchor.value()));
-        substraitUserDefined->set_nullability(
-            ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
-        substraitType->set_allocated_user_defined(substraitUserDefined);
-        break;
-      } else {
-        VELOX_UNSUPPORTED(
-            "type anchor not found for velox type '{}'", type->toString());
-      }
+      auto substraitUserDefined =
+          google::protobuf::Arena::CreateMessage<::substrait::Type_UserDefined>(
+              &arena);
+      substraitUserDefined->set_type_reference(0);
+      substraitUserDefined->set_nullability(
+          ::substrait::Type_Nullability_NULLABILITY_NULLABLE);
+      substraitType->set_allocated_user_defined(substraitUserDefined);
+      break;
     }
     case velox::TypeKind::FUNCTION:
     case velox::TypeKind::OPAQUE:

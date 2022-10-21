@@ -21,7 +21,6 @@
 #include "velox/vector/tests/utils/VectorMaker.h"
 
 #include "velox/substrait/SubstraitToVeloxPlan.h"
-#include "velox/substrait/VeloxToSubstraitMappings.h"
 #include "velox/substrait/VeloxToSubstraitPlan.h"
 
 using namespace facebook::velox;
@@ -73,7 +72,6 @@ class VeloxSubstraitRoundTripTest : public OperatorTestBase {
 
   std::shared_ptr<VeloxToSubstraitPlanConvertor> veloxConvertor_ =
       std::make_shared<VeloxToSubstraitPlanConvertor>();
-
   std::shared_ptr<SubstraitVeloxPlanConverter> substraitConverter_ =
       std::make_shared<SubstraitVeloxPlanConverter>(pool_.get());
 };
@@ -94,6 +92,7 @@ TEST_F(VeloxSubstraitRoundTripTest, filter) {
   assertPlanConversion(plan, "SELECT * FROM tmp WHERE c2 < 1000");
 }
 
+<<<<<<< HEAD:velox/substrait/tests/VeloxSubstraitRoundTripTest.cpp
 <<<<<<< HEAD:velox/substrait/tests/VeloxSubstraitRoundTripTest.cpp
 TEST_F(VeloxSubstraitRoundTripTest, null) {
 =======
@@ -146,6 +145,9 @@ TEST_F(VeloxSubstraitRoundTripPlanConverterTest, scalarFunc_compare_test) {
 
 TEST_F(VeloxSubstraitRoundTripPlanConverterTest, null) {
 >>>>>>> ffff5c14... [POAE7-2379] fix bug of 'not a scalar type! kind: ARRAY':velox/substrait/tests/VeloxSubstraitRoundTripPlanConverterTest.cpp
+=======
+TEST_F(VeloxSubstraitRoundTripTest, null) {
+>>>>>>> 8a81a3f8... Merge code from upstream velox:velox/substrait/tests/VeloxSubstraitRoundTripPlanConverterTest.cpp
   auto vectors = makeRowVector(ROW({}, {}), 1);
   auto plan = PlanBuilder().values({vectors}).project({"NULL"}).planNode();
   assertPlanConversion(plan, "SELECT NULL ");
@@ -224,6 +226,19 @@ TEST_F(VeloxSubstraitRoundTripTest, sumAndCount) {
                   .planNode();
 
   assertPlanConversion(plan, "SELECT sum(c1), count(c4) FROM tmp");
+}
+
+TEST_F(VeloxSubstraitRoundTripTest, avgAndCount) {
+  auto vectors = makeVectors(2, 7, 3);
+  createDuckDbTable(vectors);
+
+  auto plan = PlanBuilder()
+                  .values(vectors)
+                  .partialAggregation({}, {"avg(c1)", "count(c4)"})
+                  .finalAggregation()
+                  .planNode();
+
+  assertPlanConversion(plan, "SELECT avg(c1), count(c4) FROM tmp");
 }
 
 TEST_F(VeloxSubstraitRoundTripTest, sumGlobal) {
@@ -329,16 +344,30 @@ TEST_F(VeloxSubstraitRoundTripTest, caseWhen) {
       "SELECT case when c0=1 then c1 when c0=2 then c2  end as x FROM tmp");
 }
 
+TEST_F(VeloxSubstraitRoundTripTest, cast) {
+  auto vectors = makeVectors(3, 4, 2);
+  createDuckDbTable(vectors);
+  auto plan = PlanBuilder().values(vectors).project({"true"}).planNode();
+  assertPlanConversion(plan, "SELECT true  FROM tmp");
+}
+
 TEST_F(VeloxSubstraitRoundTripTest, ifThen) {
   auto vectors = makeVectors(3, 4, 2);
   createDuckDbTable(vectors);
-
   auto plan = PlanBuilder()
                   .values(vectors)
                   .project({"if (c0 = 1, c0 + 1, c1 + 2) as x"})
                   .planNode();
   assertPlanConversion(
       plan, "SELECT if (c0 = 1, c0 + 1, c1 + 2) as x FROM tmp");
+}
+
+TEST_F(VeloxSubstraitRoundTripTest, coalesce) {
+  auto vectors = makeVectors(3, 4, 2);
+  createDuckDbTable(vectors);
+  auto plan =
+      PlanBuilder().values(vectors).project({"coalesce(c0,c1) "}).planNode();
+  assertPlanConversion(plan, "SELECT coalesce(c0,c1)   FROM tmp");
 }
 
 TEST_F(VeloxSubstraitRoundTripTest, notNullLiteral) {

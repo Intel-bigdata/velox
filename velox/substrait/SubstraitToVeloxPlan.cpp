@@ -15,7 +15,6 @@
  */
 
 #include "velox/substrait/SubstraitToVeloxPlan.h"
-#include "velox/core/Expressions.h"
 #include "velox/substrait/TypeUtils.h"
 #include "velox/substrait/VariantToVectorConverter.h"
 #include "velox/type/Type.h"
@@ -355,7 +354,7 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     return planNode;
   }
   if (rel.has_join()) {
-    return toVeloxPlan(rel.join(), pool);
+    return toVeloxPlan(rel.join());
   }
 
   VELOX_NYI("Substrait conversion not supported for Rel.");
@@ -480,7 +479,6 @@ connector::hive::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
       switch (typeCase) {
         case ::substrait::Expression::RexTypeCase::kSelection: {
           auto sel = argExpr.selection();
-
           // TODO: Only direct reference is considered here.
           auto dRef = sel.direct_reference();
           colIdx = substraitParser_->parseReferenceSegment(dRef);
@@ -562,7 +560,6 @@ void SubstraitVeloxPlanConverter::flattenConditions(
       if (getNameBeforeDelimiter(filterNameSpec, ":") == "and") {
         for (const auto& sCondition : sFunc.arguments()) {
           flattenConditions(sCondition.value(), scalarFunctions);
-
         }
       } else {
         scalarFunctions.emplace_back(sFunc);
@@ -620,15 +617,13 @@ void SubstraitVeloxPlanConverter::extractJoinKeys(
     if (visited->rex_type_case() ==
         ::substrait::Expression::RexTypeCase::kScalarFunction) {
       auto sFunc = visited->scalar_function();
-      auto filterNameSpec = substraitParser_->findFunctionSpec(
+      auto funcName = substraitParser_->findFunctionSpec(
           functionMap_, sFunc.function_reference());
-      const auto& funcName = substraitParser_->getFunctionName(filterNameSpec);
       const auto& args = visited->scalar_function().arguments();
       if (funcName == "and") {
         expressions.push_back(&args[0].value());
         expressions.push_back(&args[1].value());
-      } else if (
-          funcName == "eq" || funcName == "equalto" || funcName == "equal") {
+      } else if (funcName == "eq") {
         VELOX_CHECK(std::all_of(
             args.cbegin(),
             args.cend(),
@@ -649,8 +644,7 @@ void SubstraitVeloxPlanConverter::extractJoinKeys(
 }
 
 core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
-    const ::substrait::JoinRel& sJoin,
-    memory::MemoryPool* pool) {
+    const ::substrait::JoinRel& sJoin) {
   if (!sJoin.has_left()) {
     VELOX_FAIL("Left Rel is expected in JoinRel.");
   }
@@ -658,8 +652,8 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     VELOX_FAIL("Right Rel is expected in JoinRel.");
   }
 
-  auto leftNode = toVeloxPlan(sJoin.left(), pool);
-  auto rightNode = toVeloxPlan(sJoin.right(), pool);
+  auto leftNode = toVeloxPlan(sJoin.left());
+  auto rightNode = toVeloxPlan(sJoin.right());
 
   auto outputRowType =
       leftNode->outputType()->unionWith(rightNode->outputType());

@@ -28,7 +28,7 @@ using namespace facebook::velox::test;
 using namespace facebook::velox::exec::test;
 using namespace facebook::velox::substrait;
 
-class VeloxSubstraitJoinRoundTripConverterTest : public OperatorTestBase {
+class VeloxSubstraitJoinRoundTripTest : public OperatorTestBase {
  protected:
   static std::vector<std::string> makeKeyNames(
       int cnt,
@@ -75,7 +75,7 @@ class VeloxSubstraitJoinRoundTripConverterTest : public OperatorTestBase {
     auto rightBatch = std::dynamic_pointer_cast<RowVector>(
         BatchMaker::createBatch(rightType, rightSize, *pool_));
 
-    auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+    auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
 
     auto planNode = PlanBuilder(planNodeIdGenerator)
                         .values({leftBatch})
@@ -105,8 +105,7 @@ class VeloxSubstraitJoinRoundTripConverterTest : public OperatorTestBase {
     auto substraitPlan = veloxConvertor_->toSubstrait(arena, plan);
 
     // Convert Substrait Plan to the same Velox Plan.
-    auto samePlan =
-        substraitConverter_->toVeloxPlan(substraitPlan, pool_.get());
+    auto samePlan = substraitConverter_->toVeloxPlan(substraitPlan);
 
     // Assert velox again.
     assertQuery(samePlan, duckDbSql);
@@ -116,10 +115,10 @@ class VeloxSubstraitJoinRoundTripConverterTest : public OperatorTestBase {
       std::make_shared<VeloxToSubstraitPlanConvertor>();
 
   std::shared_ptr<SubstraitVeloxPlanConverter> substraitConverter_ =
-      std::make_shared<SubstraitVeloxPlanConverter>();
+      std::make_shared<SubstraitVeloxPlanConverter>(pool_.get());
 };
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, bigintArray) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, bigintArray) {
   testJoin(
       {BIGINT()},
       16000,
@@ -129,7 +128,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, bigintArray) {
       "  WHERE t_k0 = u_k0");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, emptyBuild) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, emptyBuild) {
   testJoin(
       {BIGINT()},
       16000,
@@ -139,7 +138,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, emptyBuild) {
       "  WHERE t_k0 = u_k0");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, normalizedKey) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, normalizedKey) {
   testJoin(
       {INTEGER(), INTEGER(), INTEGER()},
       16000,
@@ -149,7 +148,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, normalizedKey) {
       "  WHERE t_k0 = u_k0 AND t_k1 = u_k1");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, filter) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, filter) {
   testJoin(
       {BIGINT()},
       16000,
@@ -160,7 +159,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, filter) {
       "((t_k0 % 100) + (u_k0 % 100)) % 40 < 20");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftJoin) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, leftJoin) {
   auto leftVectors = {
       makeRowVector({
           makeFlatVector<int32_t>({1, 2, 3}),
@@ -177,7 +176,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftJoin) {
   createDuckDbTable("t", leftVectors);
   createDuckDbTable("u", rightVectors);
 
-  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
 
   auto buildSide = PlanBuilder(planNodeIdGenerator)
                        .values(rightVectors)
@@ -200,7 +199,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftJoin) {
       "SELECT t.c0,u.c0  FROM t LEFT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, rightJoin) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, rightJoin) {
   auto leftVectors = {
       makeRowVector({
           makeFlatVector<int32_t>({1, 2, 3, 4, 5}),
@@ -219,7 +218,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, rightJoin) {
   createDuckDbTable("t", leftVectors);
   createDuckDbTable("u", rightVectors);
 
-  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
 
   auto buildSide = PlanBuilder(planNodeIdGenerator)
                        .values(rightVectors)
@@ -242,7 +241,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, rightJoin) {
       "SELECT t.c0, t.c1 FROM t RIGHT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftSemiJoin) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, leftSemiJoin) {
   auto leftVectors = makeRowVector({
       makeFlatVector<int32_t>(
           1'234, [](auto row) { return row % 11; }, nullEvery(13)),
@@ -257,7 +256,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftSemiJoin) {
   createDuckDbTable("t", {leftVectors});
   createDuckDbTable("u", {rightVectors});
 
-  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   auto op = PlanBuilder(planNodeIdGenerator)
                 .values({leftVectors})
                 .hashJoin(
@@ -276,7 +275,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, leftSemiJoin) {
       op, "SELECT t.c1 FROM t WHERE t.c0 IN (SELECT c0 FROM u)");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, fullJoin) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, fullJoin) {
   // Left side keys are [0, 1, 2,..10].
   auto leftVectors = {
       makeRowVector({
@@ -302,7 +301,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, fullJoin) {
   createDuckDbTable("t", leftVectors);
   createDuckDbTable("u", {rightVectors});
 
-  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
 
   auto buildSide = PlanBuilder(planNodeIdGenerator)
                        .values({rightVectors})
@@ -324,7 +323,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, fullJoin) {
       op, "SELECT t.c0, t.c1, u.c1 FROM t FULL OUTER JOIN u ON t.c0 = u.c0");
 }
 
-TEST_F(VeloxSubstraitJoinRoundTripConverterTest, antiJoin) {
+TEST_F(VeloxSubstraitJoinRoundTripTest, antiJoin) {
   auto leftVectors = makeRowVector({
       makeFlatVector<int32_t>(
           1'000, [](auto row) { return row % 11; }, nullEvery(13)),
@@ -339,7 +338,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, antiJoin) {
   createDuckDbTable("t", {leftVectors});
   createDuckDbTable("u", {rightVectors});
 
-  auto planNodeIdGenerator = std::make_shared<PlanNodeIdGenerator>();
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
   auto op = PlanBuilder(planNodeIdGenerator)
                 .values({leftVectors})
                 .hashJoin(
@@ -351,7 +350,7 @@ TEST_F(VeloxSubstraitJoinRoundTripConverterTest, antiJoin) {
                         .planNode(),
                     "",
                     {"c1"},
-                    core::JoinType::kAnti)
+                    core::JoinType::kNullAwareAnti)
                 .planNode();
 
   assertQuery(

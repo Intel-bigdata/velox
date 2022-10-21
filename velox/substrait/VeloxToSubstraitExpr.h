@@ -17,8 +17,8 @@
 #pragma once
 
 #include "velox/core/PlanNode.h"
-#include "velox/substrait/SubstraitExtensionCollector.h"
 
+#include "velox/substrait/SubstraitExtensionCollector.h"
 #include "velox/substrait/VeloxToSubstraitType.h"
 #include "velox/substrait/proto/substrait/algebra.pb.h"
 #include "velox/vector/ConstantVector.h"

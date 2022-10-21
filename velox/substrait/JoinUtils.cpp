@@ -32,7 +32,7 @@ namespace join {
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_OUTER;
     case core::JoinType::kLeftSemi:
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_SEMI;
-    case core::JoinType::kAnti:
+    case core::JoinType::kNullAwareAnti:
       return ::substrait::JoinRel_JoinType_JOIN_TYPE_ANTI;
     default:
       VELOX_UNSUPPORTED(
@@ -53,7 +53,7 @@ core::JoinType fromProto(::substrait::JoinRel_JoinType joinType) {
     case ::substrait::JoinRel_JoinType_JOIN_TYPE_SEMI:
       return core::JoinType::kLeftSemi;
     case ::substrait::JoinRel_JoinType_JOIN_TYPE_ANTI:
-      return core::JoinType::kAnti;
+      return core::JoinType::kNullAwareAnti;
     default:
       VELOX_UNSUPPORTED("Unsupported substrait join type, {}", joinType);
   }

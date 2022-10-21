@@ -39,23 +39,6 @@ class VeloxToSubstraitTypeTest : public ::testing::Test {
         << ", but got: " << sameType->toString();
   }
 
-  template <SubstraitTypeKind kind>
-  void testFromVelox(const TypePtr& type) {
-    const auto& substraitType = fromVelox(type);
-    ASSERT_EQ(substraitType->kind(), kind);
-  }
-
-  template <class T>
-  void testFromVelox(
-      const TypePtr& type,
-      const std::function<void(const std::shared_ptr<const T>&)>&
-          typeCallBack) {
-    const auto& substraitType = fromVelox(type);
-    if (typeCallBack) {
-      typeCallBack(std::dynamic_pointer_cast<const T>(substraitType));
-    }
-  }
-
   std::shared_ptr<VeloxToSubstraitTypeConvertor> typeConvertor_;
 
   std::shared_ptr<SubstraitParser> substraitParser_ =
@@ -85,49 +68,4 @@ TEST_F(VeloxToSubstraitTypeTest, basic) {
           {BIGINT(), ROW({"x", "y"}, {BOOLEAN(), VARCHAR()}), REAL()}));
   ASSERT_ANY_THROW(testTypeConversion(ROW({}, {})));
 }
-
-TEST_F(VeloxToSubstraitTypeTest, fromVeloxTest) {
-  testFromVelox<SubstraitTypeKind::kBool>(BOOLEAN());
-  testFromVelox<SubstraitTypeKind::kI8>(TINYINT());
-  testFromVelox<SubstraitTypeKind::kI16>(SMALLINT());
-  testFromVelox<SubstraitTypeKind::kI32>(INTEGER());
-  testFromVelox<SubstraitTypeKind::kI64>(BIGINT());
-  testFromVelox<SubstraitTypeKind::kFp32>(REAL());
-  testFromVelox<SubstraitTypeKind::kFp64>(DOUBLE());
-  testFromVelox<SubstraitTypeKind::kTimestamp>(TIMESTAMP());
-  testFromVelox<SubstraitTypeKind::kDate>(DATE());
-
-  testFromVelox<SubstraitTypeKind::kIntervalDay>(INTERVAL_DAY_TIME());
-
-  testFromVelox<SubstraitStructType>(
-      ROW({"a", "b"}, {TINYINT(), INTEGER()}),
-      [](const std::shared_ptr<const SubstraitStructType>& typePtr) {
-        ASSERT_TRUE(typePtr->children().size() == 2);
-        ASSERT_TRUE(typePtr->children()[0]->kind() == SubstraitTypeKind::kI8);
-        ASSERT_TRUE(typePtr->children()[1]->kind() == SubstraitTypeKind::kI32);
-      });
-
-  testFromVelox<SubstraitStructType>(
-      ROW({"a", "b"}, {TINYINT(), ROW({INTEGER(), BIGINT()})}),
-      [](const std::shared_ptr<const SubstraitStructType>& typePtr) {
-        ASSERT_TRUE(typePtr->children().size() == 2);
-        ASSERT_TRUE(typePtr->children()[0]->kind() == SubstraitTypeKind::kI8);
-        ASSERT_TRUE(
-            typePtr->children()[1]->kind() == SubstraitTypeKind::kStruct);
-      });
-
-  testFromVelox<SubstraitListType>(
-      ARRAY({TINYINT()}),
-      [](const std::shared_ptr<const SubstraitListType>& typePtr) {
-        ASSERT_TRUE(typePtr->type()->kind() == SubstraitTypeKind ::kI8);
-      });
-
-  testFromVelox<SubstraitMapType>(
-      MAP(INTEGER(), BIGINT()),
-      [](const std::shared_ptr<const SubstraitMapType>& typePtr) {
-        ASSERT_TRUE(typePtr->keyType()->kind() == SubstraitTypeKind ::kI32);
-        ASSERT_TRUE(typePtr->valueType()->kind() == SubstraitTypeKind ::kI64);
-      });
-}
-
 } // namespace facebook::velox::substrait::test

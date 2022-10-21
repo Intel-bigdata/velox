@@ -177,7 +177,7 @@ const ::substrait::Expression& VeloxToSubstraitExprConvertor::toSubstraitExpr(
     }
   }
 
-  VELOX_NYI("Unsupported function name '{}'", callTypeExpr->name());
+  return *substraitExpr;
 }
 
 const ::substrait::Expression_Literal&
