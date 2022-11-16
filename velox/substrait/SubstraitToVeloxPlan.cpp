@@ -180,6 +180,24 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
       childNode);
 }
 
+
+core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
+    const ::substrait::FetchRel& fetchRel) {
+  core::PlanNodePtr childNode;
+  if (fetchRel.has_input()) {
+    childNode = toVeloxPlan(fetchRel.input());
+  } else {
+    VELOX_FAIL("Child Rel is expected in FetchRel.");
+  }
+
+  return std::make_shared<core::LimitNode>(
+      nextPlanNodeId(),
+      (int32_t)fetchRel.offset(),
+      (int32_t)fetchRel.count(),
+      false /*isPartial*/,
+      childNode);
+}
+
 core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     const ::substrait::ReadRel& readRel,
     std::shared_ptr<SplitInfo>& splitInfo) {
@@ -355,6 +373,9 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
   }
   if (rel.has_join()) {
     return toVeloxPlan(rel.join());
+  }
+  if (rel.has_fetch()) {
+    return toVeloxPlan(rel.fetch());
   }
 
   VELOX_NYI("Substrait conversion not supported for Rel.");
