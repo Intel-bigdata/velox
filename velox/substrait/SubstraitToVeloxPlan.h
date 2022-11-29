@@ -77,7 +77,10 @@ class SubstraitVeloxPlanConverter {
   core::PlanNodePtr toVeloxPlan(const ::substrait::RelRoot& root);
 
   /// Used to convert Substrait SortRel into Velox PlanNode.
-  core::PlanNodePtr toVeloxPlan(const ::substrait::SortRel& sSort);
+  core::PlanNodePtr toVeloxPlan(const ::substrait::SortRel& sortRel);
+
+  /// Used to convert Substrait TopNRel into Velox PlanNode.
+  core::PlanNodePtr toVeloxPlan(const ::substrait::TopNRel& topNRel);
 
   /// Convert Substrait JoinRel into Velox PlanNode.
   core::PlanNodePtr toVeloxPlan(const ::substrait::JoinRel& substraitJoin);
@@ -144,6 +147,15 @@ class SubstraitVeloxPlanConverter {
   /// recognizable representations.
   std::shared_ptr<SubstraitParser> substraitParser_{
       std::make_shared<SubstraitParser>()};
+
+  /// Helper Function to convert Substrait SortField.
+  std::pair<
+      std::vector<core::FieldAccessTypedExprPtr>,
+      std::vector<core::SortOrder>>
+  processSortField(
+      const ::google::protobuf::RepeatedPtrField<::substrait::SortField>&
+          sortField,
+      const RowTypePtr& inputType);
 
   /// The Expression converter used to convert Substrait representations into
   /// Velox expressions.
