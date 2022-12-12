@@ -577,11 +577,15 @@ class variant {
     if (ptr_ == nullptr) {
       return true;
     }
+
+    // NaN is different from inf or -inf in floating point arithmetic.
+    // Divided by 0 in final AVG will return a NaN.
     return kind_ == TypeKind::DOUBLE &&
-        (reinterpret_cast<const double*>(ptr_)[0] ==
-             -std::numeric_limits<double>::infinity() ||
-         reinterpret_cast<const double*>(ptr_)[0] ==
-             std::numeric_limits<double>::infinity());
+        (std::isnan(reinterpret_cast<const double*>(ptr_)[0]) ||
+         (reinterpret_cast<const double*>(ptr_)[0] ==
+              -std::numeric_limits<double>::infinity() ||
+          reinterpret_cast<const double*>(ptr_)[0] ==
+              std::numeric_limits<double>::infinity()));
   }
 
   uint64_t hash() const;

@@ -344,7 +344,7 @@ StopReason Driver::runInternal(
                   });
               RuntimeStatWriterScopeGuard statsWriterGuard(op);
               result = op->getOutput();
-              if (result) {
+              if (result && result->size() > 0) {
                 VELOX_CHECK(
                     result->size() > 0,
                     "Operator::getOutput() must return nullptr or "
