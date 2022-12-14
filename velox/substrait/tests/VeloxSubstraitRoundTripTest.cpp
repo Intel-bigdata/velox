@@ -92,62 +92,7 @@ TEST_F(VeloxSubstraitRoundTripTest, filter) {
   assertPlanConversion(plan, "SELECT * FROM tmp WHERE c2 < 1000");
 }
 
-<<<<<<< HEAD:velox/substrait/tests/VeloxSubstraitRoundTripTest.cpp
-<<<<<<< HEAD:velox/substrait/tests/VeloxSubstraitRoundTripTest.cpp
 TEST_F(VeloxSubstraitRoundTripTest, null) {
-=======
-TEST_F(VeloxSubstraitRoundTripPlanConverterTest, scalarFunc_string_test) {
-  std::vector<RowVectorPtr> vectors;
-  vectors.reserve(1);
-  auto dow = makeFlatVector<std::string>(
-      {"monday",
-       "tuesday",
-       "wednesday",
-       "thursday",
-       "friday",
-       "saturday",
-       "sunday"});
-  auto rowVector = makeRowVector({"dow"}, {dow});
-  vectors.emplace_back(rowVector);
-  createDuckDbTable(vectors);
-  auto plan = PlanBuilder().values(vectors).filter("dow like 's%'").planNode();
-  assertPlanConversion(plan, "SELECT * FROM tmp where dow like 's%'");
-  plan = PlanBuilder().values(vectors).project({"substr(dow,1,3)"}).planNode();
-  assertPlanConversion(plan, "SELECT substr(dow,1,3) FROM tmp ");
-}
-
-TEST_F(VeloxSubstraitRoundTripPlanConverterTest, scalarFunc_boolean_test) {
-  auto vectors = makeVectors(3, 4, 2);
-  createDuckDbTable(vectors);
-
-  auto plan =
-      PlanBuilder().values(vectors).filter("c0 < 100 and c2 < 1000").planNode();
-  assertPlanConversion(plan, "SELECT * FROM tmp WHERE c0 < 100 and c2 < 1000");
-
-  plan =
-      PlanBuilder().values(vectors).filter("c0 < 100 or c2 < 1000").planNode();
-  assertPlanConversion(plan, "SELECT * FROM tmp WHERE c0 < 100 or c2 < 1000");
-
-  plan = PlanBuilder().values(vectors).filter("not c0 < 100").planNode();
-  assertPlanConversion(plan, "SELECT * FROM tmp WHERE not c0 < 100");
-}
-
-TEST_F(VeloxSubstraitRoundTripPlanConverterTest, scalarFunc_compare_test) {
-  auto vectors = makeVectors(3, 4, 2);
-  createDuckDbTable(vectors);
-
-  auto plan = PlanBuilder()
-                  .values(vectors)
-                  .filter("c0 between 100 and 1000")
-                  .planNode();
-  assertPlanConversion(plan, "SELECT * FROM tmp WHERE c0 between 100 and 1000");
-}
-
-TEST_F(VeloxSubstraitRoundTripPlanConverterTest, null) {
->>>>>>> ffff5c14... [POAE7-2379] fix bug of 'not a scalar type! kind: ARRAY':velox/substrait/tests/VeloxSubstraitRoundTripPlanConverterTest.cpp
-=======
-TEST_F(VeloxSubstraitRoundTripTest, null) {
->>>>>>> 8a81a3f8... Merge code from upstream velox:velox/substrait/tests/VeloxSubstraitRoundTripPlanConverterTest.cpp
   auto vectors = makeRowVector(ROW({}, {}), 1);
   auto plan = PlanBuilder().values({vectors}).project({"NULL"}).planNode();
   assertPlanConversion(plan, "SELECT NULL ");

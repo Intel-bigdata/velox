@@ -736,8 +736,9 @@ void SubstraitVeloxPlanConverter::extractJoinKeys(
     if (visited->rex_type_case() ==
         ::substrait::Expression::RexTypeCase::kScalarFunction) {
       auto sFunc = visited->scalar_function();
-      auto funcName = substraitParser_->findFunctionSpec(
+      auto funcNameSpec = substraitParser_->findFunctionSpec(
           functionMap_, sFunc.function_reference());
+       auto funcName = getNameBeforeDelimiter(funcNameSpec, ":");
       const auto& args = visited->scalar_function().arguments();
       if (funcName == "and") {
         expressions.push_back(&args[0].value());
@@ -779,9 +780,9 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
 
   auto joinType = join::fromProto(sJoin.type());
 
-  if (joinType == core::JoinType::kLeftSemi) {
+  if (joinType == core::JoinType::kLeftSemiFilter) {
     outputRowType = leftNode->outputType();
-  } else if (joinType == core::JoinType::kRightSemi) {
+  } else if (joinType == core::JoinType::kRightSemiFilter) {
     outputRowType = rightNode->outputType();
   }
 
