@@ -79,8 +79,14 @@ class SubstraitVeloxPlanConverter {
   /// Used to convert Substrait SortRel into Velox PlanNode.
   core::PlanNodePtr toVeloxPlan(const ::substrait::SortRel& sortRel);
 
-  /// Convert Substrait JoinRel into Velox PlanNode.
-  core::PlanNodePtr toVeloxPlan(const ::substrait::JoinRel& substraitJoin);
+  /// Convert Substrait HashJoinRel into Velox PlanNode.
+  core::PlanNodePtr toVeloxPlan(const ::substrait::HashJoinRel& hashJoinRel);
+
+  /// Convert Substrait MergeJoinRel into Velox PlanNode.
+  core::PlanNodePtr toVeloxPlan(const ::substrait::MergeJoinRel& mergeJoinRel);
+
+  /// Convert Substrait CrossJoinRel into Velox PlanNode.
+  core::PlanNodePtr toVeloxPlan(const ::substrait::CrossRel& crossJoinRel);
 
   /// Convert Substrait Plan into Velox PlanNode.
   core::PlanNodePtr toVeloxPlan(const ::substrait::Plan& substraitPlan);
@@ -130,16 +136,6 @@ class SubstraitVeloxPlanConverter {
       const ::substrait::Expression& substraitFilter,
       std::vector<::substrait::Expression_ScalarFunction>& scalarFunctions);
 
-  /// Extract join keys from joinExpression.
-  /// joinExpression is a boolean condition that describes whether each record
-  /// from the left set match the record from the right set. The condition
-  /// must only include the following operations: AND, ==, field references.
-  /// Field references correspond to the direct output order of the data.
-  void extractJoinKeys(
-      const ::substrait::Expression& joinExpression,
-      std::vector<const ::substrait::Expression::FieldReference*>& leftExprs,
-      std::vector<const ::substrait::Expression::FieldReference*>& rightExprs);
-
   /// The Substrait parser used to convert Substrait representations into
   /// recognizable representations.
   std::shared_ptr<SubstraitParser> substraitParser_{
@@ -153,6 +149,48 @@ class SubstraitVeloxPlanConverter {
       const ::google::protobuf::RepeatedPtrField<::substrait::SortField>&
           sortField,
       const RowTypePtr& inputType);
+
+  /// Helper function to convert the input of Substrait Rel to Velox Node.
+  template <typename T>
+  std::pair<core::PlanNodePtr, core::PlanNodePtr> convertTwoInputs(T rel) {
+    if (!rel.has_left()) {
+      VELOX_FAIL("Left Rel is expected in CrossRel.");
+    }
+    if (!rel.has_right()) {
+      VELOX_FAIL("Right Rel is expected in CrossRel.");
+    }
+    return {toVeloxPlan(rel.left()), toVeloxPlan(rel.right())};
+  };
+
+  /// Helper function to convert the join keys of Substrait Rel to Velox Join
+  /// Node Keys.
+  template <typename T>
+  std::pair<
+      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>,
+      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>>
+  convertJoinKeys(
+      T rel,
+      const RowTypePtr& leftNodeType,
+      const RowTypePtr& rightNodeType) {
+    auto substraitLeftKeys = rel.left_keys();
+    auto substraitRightKeys = rel.right_keys();
+    VELOX_CHECK_EQ(substraitLeftKeys.size(), substraitRightKeys.size());
+
+    std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> leftKeys,
+        rightKeys;
+    leftKeys.reserve(substraitLeftKeys.size());
+    rightKeys.reserve(substraitRightKeys.size());
+
+    for (auto leftKey : substraitLeftKeys) {
+      leftKeys.emplace_back(exprConverter_->toVeloxExpr(
+          leftKey.mutable_expression()->selection(), leftNodeType));
+    }
+    for (auto rightKey : substraitRightKeys) {
+      rightKeys.emplace_back(exprConverter_->toVeloxExpr(
+          rightKey.mutable_expression()->selection(), rightNodeType));
+    }
+    return {leftKeys, rightKeys};
+  };
 
   /// The Expression converter used to convert Substrait representations into
   /// Velox expressions.

@@ -25,8 +25,20 @@ namespace join {
 /// convert velox join type to substrait protocol join type
 ::substrait::JoinRel_JoinType toProto(core::JoinType joinType);
 
+/// convert velox join type to substrait protocol hash join type
+::substrait::HashJoinRel_JoinType toHashProto(core::JoinType joinType);
+
+/// convert velox join type to substrait protocol merge join type
+::substrait::MergeJoinRel_JoinType toMergeProto(core::JoinType joinType);
+
 /// convert substrait join type to velox join type
 core::JoinType fromProto(::substrait::JoinRel_JoinType joinType);
+
+/// convert substrait hash join type to velox join type
+core::JoinType fromProto(::substrait::HashJoinRel_JoinType hashJoinType);
+
+/// convert substrait  merge join type to velox join type
+core::JoinType fromProto(::substrait::MergeJoinRel_JoinType mergeJoinType);
 } // namespace join
 
 } // namespace facebook::velox::substrait

@@ -61,12 +61,36 @@ class VeloxSubstraitJoinRoundTripTest : public OperatorTestBase {
     return result;
   }
 
+  static CursorParameters makeCursorParameters(
+      const std::shared_ptr<const core::PlanNode>& planNode,
+      uint32_t preferredOutputBatchSize) {
+    auto queryCtx = core::QueryCtx::createForTest();
+    queryCtx->setConfigOverridesUnsafe(
+        {{core::QueryConfig::kCreateEmptyFiles, "true"}});
+
+    CursorParameters params;
+    params.planNode = planNode;
+    params.queryCtx = core::QueryCtx::createForTest();
+    params.queryCtx->setConfigOverridesUnsafe(
+        {{core::QueryConfig::kPreferredOutputBatchSize,
+          std::to_string(preferredOutputBatchSize)}});
+    return params;
+  }
+
+  template <typename T>
+  VectorPtr sequence(vector_size_t size, T start = 0) {
+    return makeFlatVector<int32_t>(
+        size, [start](auto row) { return start + row; });
+  }
+
   void testJoin(
       const std::vector<TypePtr>& keyTypes,
       int32_t leftSize,
       int32_t rightSize,
       const std::string& referenceQuery,
-      const std::string& filter = "") {
+      const std::string& filter = "",
+      const std::vector<std::string>& outputLayout = {},
+      core::JoinType joinType = core::JoinType::kInner) {
     auto leftType = makeRowType(keyTypes, "t_");
     auto rightType = makeRowType(keyTypes, "u_");
 
@@ -86,13 +110,176 @@ class VeloxSubstraitJoinRoundTripTest : public OperatorTestBase {
                                 .values({rightBatch})
                                 .planNode(),
                             filter,
-                            concat(leftType->names(), rightType->names()))
+                            outputLayout.empty()
+                                ? concat(leftType->names(), rightType->names())
+                                : outputLayout)
                         .planNode();
 
     createDuckDbTable("t", {leftBatch});
     createDuckDbTable("u", {rightBatch});
-
+    assertQuery(planNode, referenceQuery);
     assertPlanConversion(planNode, referenceQuery);
+  }
+
+  template <typename T>
+  void testMergeJoin(
+      std::function<T(vector_size_t /*row*/)> leftKeyAt,
+      std::function<T(vector_size_t /*row*/)> rightKeyAt) {
+    // Single batch on the left and right sides of the join.
+    {
+      auto leftKeys = makeFlatVector<T>(1'234, leftKeyAt);
+      auto rightKeys = makeFlatVector<T>(1'234, rightKeyAt);
+
+      testMergeJoin({leftKeys}, {rightKeys});
+    }
+
+    // Multiple batches on one side. Single batch on the other side.
+    {
+      std::vector<VectorPtr> leftKeys = {
+          makeFlatVector<T>(1024, leftKeyAt),
+          makeFlatVector<T>(
+              1024, [&](auto row) { return leftKeyAt(1024 + row); }),
+      };
+      std::vector<VectorPtr> rightKeys = {makeFlatVector<T>(2048, rightKeyAt)};
+
+      testMergeJoin(leftKeys, rightKeys);
+
+      // Swap left and right side keys.
+      testMergeJoin(rightKeys, leftKeys);
+    }
+
+    // Multiple batches on each side.
+    {
+      std::vector<VectorPtr> leftKeys = {
+          makeFlatVector<T>(512, leftKeyAt),
+          makeFlatVector<T>(
+              1024, [&](auto row) { return leftKeyAt(512 + row); }),
+          makeFlatVector<T>(
+              16, [&](auto row) { return leftKeyAt(512 + 1024 + row); }),
+      };
+      std::vector<VectorPtr> rightKeys = {
+          makeFlatVector<T>(123, rightKeyAt),
+          makeFlatVector<T>(
+              1024, [&](auto row) { return rightKeyAt(123 + row); }),
+          makeFlatVector<T>(
+              1234, [&](auto row) { return rightKeyAt(123 + 1024 + row); }),
+      };
+
+      testMergeJoin(leftKeys, rightKeys);
+
+      // Swap left and right side keys.
+      testMergeJoin(rightKeys, leftKeys);
+    }
+  }
+
+  void testMergeJoin(
+      const std::vector<VectorPtr>& leftKeys,
+      const std::vector<VectorPtr>& rightKeys) {
+    std::vector<RowVectorPtr> left;
+    left.reserve(leftKeys.size());
+    vector_size_t startRow = 0;
+    for (const auto& key : leftKeys) {
+      auto payload = makeFlatVector<int32_t>(
+          key->size(), [startRow](auto row) { return (startRow + row) * 10; });
+      left.push_back(makeRowVector({key, payload}));
+      startRow += key->size();
+    }
+
+    std::vector<RowVectorPtr> right;
+    right.reserve(rightKeys.size());
+    startRow = 0;
+    for (const auto& key : rightKeys) {
+      auto payload = makeFlatVector<int32_t>(
+          key->size(), [startRow](auto row) { return (startRow + row) * 20; });
+      right.push_back(makeRowVector({key, payload}));
+      startRow += key->size();
+    }
+
+    createDuckDbTable("t", left);
+    createDuckDbTable("u", right);
+
+    // Test INNER join.
+    auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+    auto plan = PlanBuilder(planNodeIdGenerator)
+                    .values(left)
+                    .mergeJoin(
+                        {"c0"},
+                        {"u_c0"},
+                        PlanBuilder(planNodeIdGenerator)
+                            .values(right)
+                            .project({"c1 AS u_c1", "c0 AS u_c0"})
+                            .planNode(),
+                        "",
+                        {"c0", "c1", "u_c1"},
+                        core::JoinType::kInner)
+                    .planNode();
+    std::string duckDbSql =
+        "SELECT t.c0, t.c1, u.c1 FROM t, u WHERE t.c0 = u.c0";
+    // Use very small output batch size.
+    assertPlanConversion(plan, 16, duckDbSql);
+    assertQuery(
+        makeCursorParameters(plan, 16),
+        "SELECT t.c0, t.c1, u.c1 FROM t, u WHERE t.c0 = u.c0");
+
+    // Use regular output batch size.
+    assertQuery(
+        makeCursorParameters(plan, 1024),
+        "SELECT t.c0, t.c1, u.c1 FROM t, u WHERE t.c0 = u.c0");
+    assertPlanConversion(plan, 1024, duckDbSql);
+    // Use very large output batch size.
+    assertQuery(
+        makeCursorParameters(plan, 10'000),
+        "SELECT t.c0, t.c1, u.c1 FROM t, u WHERE t.c0 = u.c0");
+    assertPlanConversion(plan, 10000, duckDbSql);
+    // Test LEFT join.
+    planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+    plan = PlanBuilder(planNodeIdGenerator)
+               .values(left)
+               .mergeJoin(
+                   {"c0"},
+                   {"u_c0"},
+                   PlanBuilder(planNodeIdGenerator)
+                       .values(right)
+                       .project({"c1 as u_c1", "c0 as u_c0"})
+                       .planNode(),
+                   "",
+                   {"c0", "c1", "u_c1"},
+                   core::JoinType::kLeft)
+               .planNode();
+    duckDbSql = "SELECT t.c0, t.c1, u.c1 FROM t LEFT JOIN u ON t.c0 = u.c0";
+    // Use very small output batch size.
+    assertQuery(
+        makeCursorParameters(plan, 16),
+        "SELECT t.c0, t.c1, u.c1 FROM t LEFT JOIN u ON t.c0 = u.c0");
+    assertPlanConversion(plan, 16, duckDbSql);
+    // Use regular output batch size.
+    assertQuery(
+        makeCursorParameters(plan, 1024),
+        "SELECT t.c0, t.c1, u.c1 FROM t LEFT JOIN u ON t.c0 = u.c0");
+    assertPlanConversion(plan, 1024, duckDbSql);
+    // Use very large output batch size.
+    assertQuery(
+        makeCursorParameters(plan, 10'000),
+        "SELECT t.c0, t.c1, u.c1 FROM t LEFT JOIN u ON t.c0 = u.c0");
+    assertPlanConversion(plan, 10000, duckDbSql);
+  }
+
+  void assertPlanConversion(
+      const std::shared_ptr<const core::PlanNode>& plan,
+      uint32_t preferredOutputBatchSize,
+      const std::string& duckDbSql) {
+    assertQuery(
+        makeCursorParameters(plan, preferredOutputBatchSize), duckDbSql);
+
+    // Convert Velox Plan to Substrait Plan.
+    google::protobuf::Arena arena;
+    auto substraitPlan = veloxConvertor_->toSubstrait(arena, plan);
+
+    // Convert Substrait Plan to the same Velox Plan.
+    auto samePlan = substraitConverter_->toVeloxPlan(substraitPlan);
+    // Assert velox again.
+    assertQuery(
+        makeCursorParameters(samePlan, preferredOutputBatchSize), duckDbSql);
   }
 
   void assertPlanConversion(
@@ -106,7 +293,6 @@ class VeloxSubstraitJoinRoundTripTest : public OperatorTestBase {
 
     // Convert Substrait Plan to the same Velox Plan.
     auto samePlan = substraitConverter_->toVeloxPlan(substraitPlan);
-
     // Assert velox again.
     assertQuery(samePlan, duckDbSql);
   }
@@ -139,13 +325,17 @@ TEST_F(VeloxSubstraitJoinRoundTripTest, emptyBuild) {
 }
 
 TEST_F(VeloxSubstraitJoinRoundTripTest, normalizedKey) {
+  std::vector<std::string> output = {
+      "t_k0", "t_k1", "t_data", "u_k0", "u_k1", "u_data"};
   testJoin(
       {INTEGER(), INTEGER(), INTEGER()},
       16000,
-      15000,
+      1500,
       "SELECT t_k0, t_k1, t_data, u_k0, u_k1, u_data FROM "
       "  t, u "
-      "  WHERE t_k0 = u_k0 AND t_k1 = u_k1");
+      "  WHERE t_k0 = u_k0 AND t_k1 = u_k1",
+      "",
+      output);
 }
 
 TEST_F(VeloxSubstraitJoinRoundTripTest, filter) {
@@ -356,4 +546,108 @@ TEST_F(VeloxSubstraitJoinRoundTripTest, antiJoin) {
   assertQuery(
       op,
       "SELECT t.c1 FROM t WHERE t.c0 NOT IN (SELECT c0 FROM u WHERE c0 IS NOT NULL)");
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripTest, nonFirstMergeJoinKeys) {
+  auto left = makeRowVector(
+      {"t_data", "t_key"},
+      {
+          makeFlatVector<int32_t>({50, 40, 30, 20, 10}),
+          makeFlatVector<int32_t>({1, 2, 3, 4, 5}),
+      });
+  auto right = makeRowVector(
+      {"u_data", "u_key"},
+      {
+          makeFlatVector<int32_t>({23, 22, 21}),
+          makeFlatVector<int32_t>({2, 4, 6}),
+      });
+
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  auto plan =
+      PlanBuilder(planNodeIdGenerator)
+          .values({left})
+          .mergeJoin(
+              {"t_key"},
+              {"u_key"},
+              PlanBuilder(planNodeIdGenerator).values({right}).planNode(),
+              "",
+              {"t_key", "t_data", "u_data"},
+              core::JoinType::kInner)
+          .planNode();
+
+  assertQuery(plan, "VALUES (2, 40, 23), (4, 20, 22)");
+  assertPlanConversion(plan, "VALUES (2, 40, 23), (4, 20, 22)");
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripTest, crossJoinbasic) {
+
+  auto leftVectors = {
+      makeRowVector({
+          makeFlatVector<int32_t>({1, 2, 3}),
+      }),
+      makeRowVector({
+          makeFlatVector<int32_t>({1, 2, 3}),
+      })};
+  auto rightVectors = {
+      makeRowVector({makeFlatVector<int32_t>({1, 2, 10})}),
+  };
+
+  createDuckDbTable("t", leftVectors);
+  createDuckDbTable("u", rightVectors);
+
+  // All x 13. Join output vectors contains multiple probe rows each.
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  auto op = PlanBuilder(planNodeIdGenerator)
+                .values(leftVectors)
+                .crossJoin(
+                    PlanBuilder(planNodeIdGenerator)
+                        .values(rightVectors)
+                        .filter("c0 < 13")
+                        .project({"c0 AS u_c0"})
+                        .planNode(),
+                    {"c0", "u_c0"})
+                .planNode();
+
+  assertPlanConversion(op, "SELECT * FROM t, u WHERE u.c0 < 13");
+
+}
+
+TEST_F(VeloxSubstraitJoinRoundTripTest, leftMergeJoin) {
+  auto leftVectors = {
+      makeRowVector({
+          makeFlatVector<int32_t>({1, 2, 3}),
+          makeNullableFlatVector<int32_t>({10, std::nullopt, 30}),
+      }),
+      makeRowVector({
+          makeFlatVector<int32_t>({1, 2, 3}),
+          makeNullableFlatVector<int32_t>({std::nullopt, 20, 30}),
+      })};
+  auto rightVectors = {
+      makeRowVector({makeFlatVector<int32_t>({1, 2, 10})}),
+  };
+
+  createDuckDbTable("t", leftVectors);
+  createDuckDbTable("u", rightVectors);
+
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+
+  auto buildSide = PlanBuilder(planNodeIdGenerator)
+                       .values(rightVectors)
+                       .project({"c0 AS u_c0"})
+                       .planNode();
+
+  auto plan = PlanBuilder(planNodeIdGenerator)
+                  .values(leftVectors)
+                  .mergeJoin(
+                      {"c0"},
+                      {"u_c0"},
+                      buildSide,
+                      "c1 + u_c0 > 0",
+                      {"c0", "u_c0"},
+                      core::JoinType::kLeft)
+                  .planNode();
+
+  assertPlanConversion(
+      plan,
+      "SELECT t.c0,u.c0  FROM t LEFT JOIN u ON (t.c0 = u.c0 AND t.c1 + u.c0 > 0)");
 }

@@ -466,8 +466,14 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     splitInfoMap_[planNode->id()] = splitInfo;
     return planNode;
   }
-  if (rel.has_join()) {
-    return toVeloxPlan(rel.join());
+  if (rel.has_hash_join()) {
+    return toVeloxPlan(rel.hash_join());
+  }
+  if (rel.has_merge_join()) {
+    return toVeloxPlan(rel.merge_join());
+  }
+  if (rel.has_cross()) {
+    return toVeloxPlan(rel.cross());
   }
   if (rel.has_fetch()) {
     return toVeloxPlan(rel.fetch());
@@ -724,60 +730,15 @@ const std::string& SubstraitVeloxPlanConverter::findFunction(
   return substraitParser_->findFunctionSpec(functionMap_, id);
 }
 
-void SubstraitVeloxPlanConverter::extractJoinKeys(
-    const ::substrait::Expression& joinExpression,
-    std::vector<const ::substrait::Expression::FieldReference*>& leftExprs,
-    std::vector<const ::substrait::Expression::FieldReference*>& rightExprs) {
-  std::vector<const ::substrait::Expression*> expressions;
-  expressions.push_back(&joinExpression);
-  while (!expressions.empty()) {
-    auto visited = expressions.back();
-    expressions.pop_back();
-    if (visited->rex_type_case() ==
-        ::substrait::Expression::RexTypeCase::kScalarFunction) {
-      auto sFunc = visited->scalar_function();
-      auto funcName = substraitParser_->findFunctionSpec(
-          functionMap_, sFunc.function_reference());
-      const auto& args = visited->scalar_function().arguments();
-      if (funcName == "and") {
-        expressions.push_back(&args[0].value());
-        expressions.push_back(&args[1].value());
-      } else if (funcName == "eq") {
-        VELOX_CHECK(std::all_of(
-            args.cbegin(),
-            args.cend(),
-            [](const ::substrait::FunctionArgument& arg) {
-              return arg.value().has_selection();
-            }));
-        leftExprs.push_back(&args[0].value().selection());
-        rightExprs.push_back(&args[1].value().selection());
-      } else {
-        VELOX_NYI("Join condition {} not supported.", funcName);
-      }
-    } else {
-      VELOX_FAIL(
-          "Unable to parse from join expression: {}",
-          joinExpression.DebugString());
-    }
-  }
-}
-
 core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
-    const ::substrait::JoinRel& sJoin) {
-  if (!sJoin.has_left()) {
-    VELOX_FAIL("Left Rel is expected in JoinRel.");
-  }
-  if (!sJoin.has_right()) {
-    VELOX_FAIL("Right Rel is expected in JoinRel.");
-  }
-
-  auto leftNode = toVeloxPlan(sJoin.left());
-  auto rightNode = toVeloxPlan(sJoin.right());
+    const ::substrait::HashJoinRel& hashJoinRel) {
+  auto [leftNode, rightNode] =
+      convertTwoInputs<::substrait::HashJoinRel>(hashJoinRel);
 
   auto outputRowType =
       leftNode->outputType()->unionWith(rightNode->outputType());
 
-  auto joinType = join::fromProto(sJoin.type());
+  auto joinType = join::fromProto(hashJoinRel.type());
 
   if (joinType == core::JoinType::kLeftSemi) {
     outputRowType = leftNode->outputType();
@@ -785,30 +746,14 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
     outputRowType = rightNode->outputType();
   }
 
-  // extract join keys from join expression
-  std::vector<const ::substrait::Expression::FieldReference*> leftExprs,
-      rightExprs;
-
-  extractJoinKeys(sJoin.expression(), leftExprs, rightExprs);
-  VELOX_CHECK_EQ(leftExprs.size(), rightExprs.size());
-
-  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> leftKeys,
-      rightKeys;
-  leftKeys.reserve(leftExprs.size());
-  rightKeys.reserve(leftExprs.size());
-  for (size_t i = 0; i < leftExprs.size(); ++i) {
-    leftKeys.emplace_back(exprConverter_->toVeloxExpr(
-        *leftExprs[i],
-        leftNode->outputType()->unionWith(rightNode->outputType())));
-    rightKeys.emplace_back(exprConverter_->toVeloxExpr(
-        *rightExprs[i],
-        leftNode->outputType()->unionWith(rightNode->outputType())));
-  }
+  // Convert keys
+  auto [leftKeys, rightKeys] = convertJoinKeys<::substrait::HashJoinRel>(
+      hashJoinRel, leftNode->outputType(), rightNode->outputType());
 
   core::TypedExprPtr filter;
-  if (sJoin.has_post_join_filter()) {
+  if (hashJoinRel.has_post_join_filter()) {
     filter = exprConverter_->toVeloxExpr(
-        sJoin.post_join_filter(),
+        hashJoinRel.post_join_filter(),
         leftNode->outputType()->unionWith(rightNode->outputType()));
   }
 
@@ -821,6 +766,55 @@ core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
       leftNode,
       rightNode,
       outputRowType);
+}
+
+core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
+    const ::substrait::MergeJoinRel& mergeJoinRel) {
+  auto [leftNode, rightNode] =
+      convertTwoInputs<::substrait::MergeJoinRel>(mergeJoinRel);
+
+  auto outputRowType =
+      leftNode->outputType()->unionWith(rightNode->outputType());
+
+  auto joinType = join::fromProto(mergeJoinRel.type());
+
+  VELOX_USER_CHECK(
+      (joinType == core::JoinType::kInner) ||
+          (joinType == core::JoinType::kLeft),
+      "Merge join supports only inner and left joins. Other join types are not supported yet.");
+
+  // Convert keys
+  auto [leftKeys, rightKeys] = convertJoinKeys<::substrait::MergeJoinRel>(
+      mergeJoinRel, leftNode->outputType(), rightNode->outputType());
+
+  core::TypedExprPtr filter;
+  if (mergeJoinRel.has_post_join_filter()) {
+    filter = exprConverter_->toVeloxExpr(
+        mergeJoinRel.post_join_filter(),
+        leftNode->outputType()->unionWith(rightNode->outputType()));
+  }
+
+  return std::make_shared<core::MergeJoinNode>(
+      nextPlanNodeId(),
+      joinType,
+      leftKeys,
+      rightKeys,
+      filter,
+      leftNode,
+      rightNode,
+      outputRowType);
+}
+
+core::PlanNodePtr SubstraitVeloxPlanConverter::toVeloxPlan(
+    const ::substrait::CrossRel& crossJoinRel) {
+  auto [leftNode, rightNode] =
+      convertTwoInputs<::substrait::CrossRel>(crossJoinRel);
+
+  auto outputRowType =
+      leftNode->outputType()->unionWith(rightNode->outputType());
+
+  return std::make_shared<core::CrossJoinNode>(
+      nextPlanNodeId(), leftNode, rightNode, outputRowType);
 }
 
 } // namespace facebook::velox::substrait
