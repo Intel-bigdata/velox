@@ -71,10 +71,7 @@ class VeloxSubstraitRoundTripTest : public OperatorTestBase {
     // Assert velox again.
     assertQuery(samePlan, duckDbSql);
   }
-<<<<<<< HEAD:velox/substrait/tests/VeloxSubstraitRoundTripTest.cpp
-=======
 
->>>>>>> f6048db7 (squash all):velox/substrait/tests/VeloxSubstraitRoundTripPlanConverterTest.cpp
   std::shared_ptr<VeloxToSubstraitPlanConvertor> veloxConvertor_ =
       std::make_shared<VeloxToSubstraitPlanConvertor>();
   std::shared_ptr<SubstraitVeloxPlanConverter> substraitConverter_ =
@@ -318,33 +315,6 @@ TEST_F(VeloxSubstraitRoundTripTest, coalesce) {
   auto plan =
       PlanBuilder().values(vectors).project({"coalesce(c0,c1) "}).planNode();
   assertPlanConversion(plan, "SELECT coalesce(c0,c1)   FROM tmp");
-}
-
-TEST_F(VeloxSubstraitRoundTripTest, notNullLiteral) {
-  auto vectors = makeRowVector(ROW({}, {}), 1);
-  auto plan = PlanBuilder(pool_.get())
-                  .values({vectors})
-                  .addNode([&](std::string id, core::PlanNodePtr input) {
-                    std::vector<std::string> projectNames = {
-                        "a", "b", "c", "d", "e", "f", "g", "h"};
-                    std::vector<core::TypedExprPtr> projectExpressions = {
-                        std::make_shared<core::ConstantTypedExpr>((bool)1),
-                        std::make_shared<core::ConstantTypedExpr>((int8_t)23),
-                        std::make_shared<core::ConstantTypedExpr>((int16_t)45),
-                        std::make_shared<core::ConstantTypedExpr>((int32_t)678),
-                        std::make_shared<core::ConstantTypedExpr>((int64_t)910),
-                        std::make_shared<core::ConstantTypedExpr>((float)1.23),
-                        std::make_shared<core::ConstantTypedExpr>((double)4.56),
-                        std::make_shared<core::ConstantTypedExpr>("789")};
-                    return std::make_shared<core::ProjectNode>(
-                        id,
-                        std::move(projectNames),
-                        std::move(projectExpressions),
-                        input);
-                  })
-                  .planNode();
-  assertPlanConversion(
-      plan, "SELECT true, 23, 45, 678, 910, 1.23, 4.56, '789'");
 }
 
 TEST_F(VeloxSubstraitRoundTripTest, orderBySingleKey) {

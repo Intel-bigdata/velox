@@ -268,7 +268,7 @@ TEST_F(VeloxSubstraitJoinRoundTripTest, leftSemiJoin) {
                         .planNode(),
                     "",
                     {"c1"},
-                    core::JoinType::kLeftSemi)
+                    core::JoinType::kLeftSemiProject)
                 .planNode();
 
   assertPlanConversion(
@@ -350,7 +350,7 @@ TEST_F(VeloxSubstraitJoinRoundTripTest, antiJoin) {
                         .planNode(),
                     "",
                     {"c1"},
-                    core::JoinType::kNullAwareAnti)
+                    core::JoinType::kAnti)
                 .planNode();
 
   assertQuery(
