@@ -73,6 +73,12 @@ class VeloxToSubstraitPlanConvertor {
       const std::shared_ptr<const core::AggregationNode>& aggregateNode,
       ::substrait::AggregateRel* aggregateRel);
 
+  /// Convert Velox HashJoin Node into Substrait JoinRel.
+  void toSubstraitJoin(
+      google::protobuf::Arena& arena,
+      const std::shared_ptr<const core::HashJoinNode> joinNode,
+      ::substrait::Rel* joinRel);
+
   /// Convert Velox OrderBy Node into Substrait SortRel.
   void toSubstrait(
       google::protobuf::Arena& arena,

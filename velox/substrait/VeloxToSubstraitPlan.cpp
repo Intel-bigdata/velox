@@ -15,6 +15,7 @@
  */
 
 #include "velox/substrait/VeloxToSubstraitPlan.h"
+#include "velox/substrait/JoinUtils.h"
 
 namespace facebook::velox::substrait {
 
@@ -105,26 +106,22 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
     ::substrait::Rel* rel) {
   if (auto filterNode =
           std::dynamic_pointer_cast<const core::FilterNode>(planNode)) {
-    auto filterRel = rel->mutable_filter();
-    toSubstrait(arena, filterNode, filterRel);
+    toSubstrait(arena, filterNode, rel->mutable_filter());
     return;
   }
   if (auto valuesNode =
           std::dynamic_pointer_cast<const core::ValuesNode>(planNode)) {
-    ::substrait::ReadRel* readRel = rel->mutable_read();
-    toSubstrait(arena, valuesNode, readRel);
+    toSubstrait(arena, valuesNode, rel->mutable_read());
     return;
   }
   if (auto projectNode =
           std::dynamic_pointer_cast<const core::ProjectNode>(planNode)) {
-    ::substrait::ProjectRel* projectRel = rel->mutable_project();
-    toSubstrait(arena, projectNode, projectRel);
+    toSubstrait(arena, projectNode, rel->mutable_project());
     return;
   }
   if (auto aggregationNode =
           std::dynamic_pointer_cast<const core::AggregationNode>(planNode)) {
-    ::substrait::AggregateRel* aggregateRel = rel->mutable_aggregate();
-    toSubstrait(arena, aggregationNode, aggregateRel);
+    toSubstrait(arena, aggregationNode, rel->mutable_aggregate());
     return;
   }
   if (auto orderbyNode =
@@ -140,6 +137,11 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
   if (auto limitNode =
           std::dynamic_pointer_cast<const core::LimitNode>(planNode)) {
     toSubstrait(arena, limitNode, rel->mutable_fetch());
+    return;
+  }
+  if (auto joinNode =
+          std::dynamic_pointer_cast<const core::HashJoinNode>(planNode)) {
+    toSubstraitJoin(arena, joinNode, rel);
     return;
   }
   VELOX_UNSUPPORTED("Unsupported plan node '{}' .", planNode->name());
@@ -220,8 +222,6 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
     // Add outputMapping for each expression.
     projRelEmit->add_output_mapping(inputTypeSize + i);
   }
-
-  return;
 }
 
 void VeloxToSubstraitPlanConvertor::toSubstrait(
@@ -399,6 +399,88 @@ const core::PlanNodePtr& VeloxToSubstraitPlanConvertor::getSingleSource(
   VELOX_USER_CHECK_EQ(
       1, sources.size(), "Plan node must have exactly one source.");
   return sources[0];
+}
+void VeloxToSubstraitPlanConvertor::toSubstraitJoin(
+    google::protobuf::Arena& arena,
+    const std::shared_ptr<const core::HashJoinNode> joinNode,
+    ::substrait::Rel* rel) {
+  const auto& joinSources = joinNode->sources();
+  auto joinOutputRowType =
+      joinSources[0]->outputType()->unionWith(joinSources[1]->outputType());
+
+  if (joinNode->joinType() == core::JoinType::kLeftSemi) {
+    joinOutputRowType = joinSources[0]->outputType();
+  } else if (joinNode->joinType() == core::JoinType::kRightSemi) {
+    joinOutputRowType = joinSources[1]->outputType();
+  }
+  auto joinOutputTypeSize = joinOutputRowType->size();
+
+  // Insert a project rel for outputRowType of HashJoinNode.
+  auto projectRel = rel->mutable_project();
+  auto projectEmitRel = projectRel->mutable_common()->mutable_emit();
+
+  for (auto i = 0; i < joinNode->outputType()->size(); i++) {
+    auto fieldRef = std::make_shared<const core::FieldAccessTypedExpr>(
+        joinNode->outputType()->childAt(i), joinNode->outputType()->nameOf(i));
+    projectRel->add_expressions()->mutable_selection()->MergeFrom(
+        exprConvertor_->toSubstraitExpr(arena, fieldRef, joinOutputRowType));
+    projectEmitRel->add_output_mapping(joinOutputTypeSize + i);
+  }
+
+  auto joinRel = projectRel->mutable_input()->mutable_join();
+
+  // JoinNode has exactly two input nodes.
+  VELOX_USER_CHECK_EQ(
+      2, joinSources.size(), "Join plan node must have exactly two sources.");
+  // Convert the input node.
+  toSubstrait(arena, joinSources[0], joinRel->mutable_left());
+  toSubstrait(arena, joinSources[1], joinRel->mutable_right());
+  // Compose the Velox PlanNode join conditions into one.
+  std::vector<core::TypedExprPtr> joinCondition;
+  int numColumns = joinNode->leftKeys().size();
+  // Compose the join expression
+  for (auto i = 0; i < numColumns; i++) {
+    joinCondition.emplace_back(std::make_shared<core::CallTypedExpr>(
+        BOOLEAN(),
+        std::vector<core::TypedExprPtr>{
+            joinNode->leftKeys().at(i), joinNode->rightKeys().at(i)},
+        "eq"));
+  }
+
+  auto makeConjunction = [](const core::TypedExprPtr& left,
+                            const core::TypedExprPtr& right) {
+    return std::make_shared<const core::CallTypedExpr>(
+        BOOLEAN(), std::vector<core::TypedExprPtr>{left, right}, "and");
+  };
+
+  core::TypedExprPtr joinExpression;
+  if (joinCondition.size() == 1) {
+    joinExpression = joinCondition.at(0);
+  } else {
+    joinExpression = makeConjunction(joinCondition.at(0), joinCondition.at(1));
+    if (joinCondition.size() > 2) {
+      for (auto i = 2; i < joinCondition.size(); i++) {
+        joinExpression = makeConjunction(joinCondition.at(i), joinExpression);
+      }
+    }
+  }
+  joinRel->mutable_expression()->MergeFrom(exprConvertor_->toSubstraitExpr(
+      arena,
+      joinExpression,
+      joinSources[0]->outputType()->unionWith(joinSources[1]->outputType())));
+
+  if (joinNode->filter()) {
+    // Set the join filter.
+    joinRel->mutable_post_join_filter()->MergeFrom(
+        exprConvertor_->toSubstraitExpr(
+            arena,
+            joinNode->filter(),
+            joinSources[0]->outputType()->unionWith(
+                joinSources[1]->outputType())));
+  }
+  joinRel->mutable_common()->mutable_direct();
+
+  joinRel->set_type(join::toProto(joinNode->joinType()));
 }
 
 } // namespace facebook::velox::substrait
