@@ -408,9 +408,9 @@ void VeloxToSubstraitPlanConvertor::toSubstraitJoin(
   auto joinOutputRowType =
       joinSources[0]->outputType()->unionWith(joinSources[1]->outputType());
 
-  if (joinNode->joinType() == core::JoinType::kLeftSemi) {
+  if (joinNode->joinType() == core::JoinType::kLeftSemiProject) {
     joinOutputRowType = joinSources[0]->outputType();
-  } else if (joinNode->joinType() == core::JoinType::kRightSemi) {
+  } else if (joinNode->joinType() == core::JoinType::kRightSemiProject) {
     joinOutputRowType = joinSources[1]->outputType();
   }
   auto joinOutputTypeSize = joinOutputRowType->size();
