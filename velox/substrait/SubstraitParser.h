@@ -111,20 +111,25 @@ class SubstraitParser {
   /// keyword. For those functions with different names in Substrait and Velox,
   /// a mapping relation should be added here.
   std::unordered_map<std::string, std::string> substraitVeloxFunctionMap_ = {
-      {"is_not_null", "isnotnull"}, /*Spark functions.*/
-      {"is_null", "isnull"},
-      {"equal", "equalto"},
-      {"lt", "lessthan"},
-      {"lte", "lessthanorequal"},
-      {"gt", "greaterthan"},
-      {"gte", "greaterthanorequal"},
-      {"not_equal", "notequalto"},
-      {"char_length", "length"},
-      {"strpos", "instr"},
-      {"ends_with", "endswith"},
-      {"starts_with", "startswith"},
-      {"datediff", "date_diff"},
-      {"modulus", "mod"} /*Presto functions.*/};
+      {"add", "plus"},
+      {"subtract", "minus"},
+      {"modulus", "mod"},
+      {"not_equal", "neq"},
+      {"equal", "eq"}};
+    //   {"is_not_null", "isnotnull"}, /*Spark functions.*/
+    //   {"is_null", "isnull"},
+    //   {"equal", "equalto"},
+    //   {"lt", "lessthan"},
+    //   {"lte", "lessthanorequal"},
+    //   {"gt", "greaterthan"},
+    //   {"gte", "greaterthanorequal"},
+    //   {"not_equal", "notequalto"},
+    //   {"char_length", "length"},
+    //   {"strpos", "instr"},
+    //   {"ends_with", "endswith"},
+    //   {"starts_with", "startswith"},
+    //   {"datediff", "date_diff"},
+    //   {"modulus", "mod"} /*Presto functions.*/};
   // The map is uesd for mapping substrait type.
   // Key: type in function name.
   // Value: substrait type name.

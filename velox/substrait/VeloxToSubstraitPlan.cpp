@@ -258,14 +258,12 @@ void VeloxToSubstraitPlanConvertor::toSubstrait(
         aggregateRel->add_measures();
 
     auto aggMaskExpr = aggregateMasks.at(i);
-    // Set substrait filter.
-    ::substrait::Expression* aggFilter = aggMeasures->mutable_filter();
+
     if (aggMaskExpr.get()) {
+      // Set substrait filter.
+      ::substrait::Expression* aggFilter = aggMeasures->mutable_filter();
       aggFilter->mutable_selection()->MergeFrom(
           exprConvertor_->toSubstraitExpr(arena, aggMaskExpr, inputType));
-    } else {
-      // Set null.
-      aggFilter = nullptr;
     }
 
     // Process measure, eg:sum(a).

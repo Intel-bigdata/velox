@@ -526,7 +526,7 @@ std::vector<MaterializedRow> materialize(const RowVectorPtr& vector) {
       auto value = variantAt(vector->childAt(j), i);
       if(value.isNull()) {
         // todo: need check type?
-        row.push_back(variant(vector->typeKind()));
+        row.push_back(variant(vector->childAt(j)->typeKind()));
       } else {
         row.push_back(value);
       }
